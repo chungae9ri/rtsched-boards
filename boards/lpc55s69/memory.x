@@ -7,3 +7,4 @@ MEMORY
   /* RAM is split into multiple blocks; 0x20000000 is the main SRAM */
   RAM (xrw)  : ORIGIN = 0x20000000, LENGTH = 256K
 }
+

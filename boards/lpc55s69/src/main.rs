@@ -2,11 +2,11 @@
 #![no_main]
 
 use cortex_m_rt::entry;
-use panic_halt as _; // Stop execution on panic
-use kernel as _; // Link the kernel crate
+use kernel as _;
+use panic_halt as _; // Stop execution on panic // Link the kernel crate
 
-use lpc55_hal as hal;
 use hal::{drivers::pins::Level, prelude::*};
+use lpc55_hal as hal;
 
 #[entry]
 fn main() -> ! {
@@ -33,3 +33,4 @@ fn main() -> ! {
         }
     }
 }
+

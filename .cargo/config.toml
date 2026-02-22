@@ -9,3 +9,4 @@ RUST_LOG = "probe_rs=warn"
 
 [build]
 target = "thumbv8m.main-none-eabihf"
+

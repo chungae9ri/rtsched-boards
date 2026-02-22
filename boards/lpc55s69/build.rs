@@ -17,3 +17,4 @@ fn main() {
     // instead of when any part of the source code changes.
     println!("cargo:rerun-if-changed=memory.x");
 }
+
