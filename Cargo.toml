@@ -31,10 +31,13 @@ panic-halt = "1.0.0"
 # 6. Embedded Trait Definitions (The Rust 'Contract')
 embedded-hal = "1.0.0"
 
+# 7. RTT for Real-Time Debugging (Optional)
+rtt-target = "0.6"
+
 [profile.release]
 codegen-units = 1 # Better optimizations
 debug = true      # Keep debug symbols for your probe-rs debugger
-lto = true        # Link-Time Optimization for smallest binary size
+lto = false       # Link-Time Optimization for smallest binary size
 panic = "abort"
 
 [profile.dev]
