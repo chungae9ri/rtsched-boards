@@ -1,36 +1,74 @@
 #![no_std]
 #![no_main]
 
+use core::sync::atomic::{AtomicBool, Ordering};
+use cortex_m::peripheral::NVIC;
 use cortex_m_rt::entry;
 use kernel as _;
-use panic_halt as _; // Stop execution on panic // Link the kernel crate
+use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
+use lpc55_hal::raw::interrupt;
+use rtt_target::{rprintln, rtt_init_print};
+
+static TICK: AtomicBool = AtomicBool::new(false);
 
 #[entry]
 fn main() -> ! {
-    let hal = hal::new();
+    rtt_init_print!();
 
-    let mut syscon = hal.syscon;
-    let mut gpio = hal.gpio.enabled(&mut syscon);
-    let mut iocon = hal.iocon.enabled(&mut syscon);
+    let mut hal = hal::new();
 
+    let clocks = hal::ClockRequirements::default()
+        .system_frequency(12.MHz())
+        .configure(&mut hal.anactrl, &mut hal.pmc, &mut hal.syscon)
+        .unwrap();
+
+    let mut gpio = hal.gpio.enabled(&mut hal.syscon);
+    let mut iocon = hal.iocon.enabled(&mut hal.syscon);
     let pins = hal::Pins::take().unwrap();
 
-    // LPC55S69-EVK red LED is on PIO1_6 (active-low)
     let mut red = pins
         .pio1_6
         .into_gpio_pin(&mut iocon, &mut gpio)
         .into_output(Level::High);
+    let mut red_high = true;
+
+    // Enable CTIMER0 @ 1 MHz source (from HAL token)
+    let ctimer0 = hal
+        .ctimer
+        .0
+        .enabled(&mut hal.syscon, clocks.support_1mhz_fro_token().unwrap());
+
+    // 1 Hz periodic interrupt from MR0
+    //ctimer0.mr[0].write(|w| unsafe { w.match_().bits(1_000_000) });
+    ctimer0.mr[0].write(|w| unsafe { w.match_().bits(5_000_000) });
+    ctimer0.mcr.modify(|_, w| w.mr0i().set_bit().mr0r().set_bit());
+    ctimer0.tcr.write(|w| w.cen().enabled());
+
+    unsafe { NVIC::unmask(hal::raw::Interrupt::CTIMER0) };
 
     loop {
-        for _ in 0..50_000 {
-            red.set_low().unwrap();
-        }
-        for _ in 0..50_000 {
-            red.set_high().unwrap();
+        if TICK.swap(false, Ordering::AcqRel) {
+            if red_high {
+                red.set_low().ok();
+                rprintln!("set red low");
+            } else {
+                red.set_high().ok();
+                rprintln!("set red high");
+            }
+            red_high = !red_high;
         }
     }
 }
 
+#[interrupt]
+fn CTIMER0() {
+    let p = unsafe { hal::raw::Peripherals::steal() };
+
+    // Clear match-0 interrupt flag (mandatory)
+    p.CTIMER0.ir.write(|w| w.mr0int().set_bit());
+
+    TICK.store(true, Ordering::Release);
+}

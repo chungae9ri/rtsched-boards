@@ -4,22 +4,14 @@
     {
       "type": "probe-rs-debug",
       "request": "launch",
-      "name": "probe_rs Executable launch",
+      "name": "probe_rs Launch (flash)",
       "cwd": "${workspaceFolder}",
-      //!MODIFY (or remove)
       "speed": 100,
-      //!MODIFY (or remove)
-      //"probe": "VID:PID:<Serial>",
       "probe": "1366:0105:000720762184",
       "runtimeExecutable": "probe-rs",
       "runtimeArgs": ["dap-server"],
-      //!MODIFY
-      //"chip": "STM32H745ZITx",
-      //"chip": "LPC55S69JEV98",
-        "chip": "LPC55S69JBD100",
-        //"protocol": "swd",
-        //LPC55S69JBD64
-        //LPC55S69JEV98
+      "chip": "LPC55S69JBD100",
+      //"protocol": "swd",
       "flashingConfig": {
         "flashingEnabled": true,
         "haltAfterReset": true,
@@ -31,31 +23,48 @@
       "coreConfigs": [
         {
           "coreIndex": 0,
-          //!MODIFY
-          //"programBinary": "Relative or fully qualified path to your programBinary",
           "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/lpc55s69",
-          //!MODIFY
-          //"svdFile": "Relative or fully qualified path to the CMSIS-SVD file for your target core"
+          "rttEnabled": true,
+          "rttChannelFormats": [
+            {
+              "channelNumber": 0,
+              "dataFormat": "String",
+              "showTimestamps": false
+            }
+          ],
         }
       ],
       "env": {
-        //!MODIFY (or remove)
-        // If you set this variable, check the VSCode console log window for the location of the log file.
         //"RUST_LOG": "info"
       },
        // Info, Debug
-      "consoleLogLevel": "Debug"
+      "consoleLogLevel": "Console"
     },
     {
-      "type": "cortex-debug",
+      "type": "probe-rs-debug",
       "request": "attach",
-      "name": "Attach (probe-rs gdb)",
-      "servertype": "external",
-      "gdbTarget": "localhost:1337",
-      "executable": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/lpc55s69",
-      "device": "LPC55S69JBD100",
+      "name": "probe_rs Attach (no flash)",
       "cwd": "${workspaceFolder}",
-      "preLaunchTask": "probe-rs gdb"
+      "speed": 100,
+      "probe": "1366:0105:000720762184",
+      "runtimeExecutable": "probe-rs",
+      "runtimeArgs": ["dap-server"],
+      "chip": "LPC55S69JBD100",
+      "coreConfigs": [
+        {
+          "coreIndex": 0,
+          "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/lpc55s69",
+          "rttEnabled": true,
+          "rttChannelFormats": [
+            {
+              "channelNumber": 0,
+              "dataFormat": "String",
+              "showTimestamps": false
+            }
+          ]
+        }
+      ],
+      "consoleLogLevel": "Console"
     }
   ]
 }
