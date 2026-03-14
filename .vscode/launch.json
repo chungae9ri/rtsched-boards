@@ -16,7 +16,7 @@
         "flashingEnabled": true,
         "haltAfterReset": true,
         "formatOptions": {
-          //!MODIFY (or remove). Valid values are: 'bin', 'hex', 'elf'(default), 'idf'
+          //Valid values are: 'bin', 'hex', 'elf'(default), 'idf'
           "binaryFormat": "elf"
         }
       },
