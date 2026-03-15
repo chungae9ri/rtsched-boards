@@ -2,8 +2,8 @@
 #![no_main]
 
 use core::sync::atomic::{AtomicBool, Ordering};
-use cortex_m::peripheral::NVIC;
-use cortex_m_rt::entry;
+use cortex_m::peripheral::{NVIC, syst::SystClkSource};
+use cortex_m_rt::{entry, exception};
 use kernel as _;
 use panic_halt as _;
 
@@ -49,6 +49,13 @@ fn main() -> ! {
 
     unsafe { NVIC::unmask(hal::raw::Interrupt::CTIMER0) };
 
+    // 1 Hz SysTick from the 12 MHz core clock.
+    hal.SYST.set_clock_source(SystClkSource::Core);
+    hal.SYST.set_reload(12_000_000 - 1);
+    hal.SYST.clear_current();
+    hal.SYST.enable_interrupt();
+    hal.SYST.enable_counter();
+
     loop {
         if TICK.swap(false, Ordering::AcqRel) {
             if red_high {
@@ -61,6 +68,11 @@ fn main() -> ! {
             red_high = !red_high;
         }
     }
+}
+
+#[exception]
+fn SysTick() {
+   rprintln!("SysTick");
 }
 
 #[interrupt]
