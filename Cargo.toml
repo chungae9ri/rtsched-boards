@@ -12,12 +12,11 @@ edition = "2024"
 cortex-m = "0.7.7"
 
 # 2. The "CMSIS-RT" Equivalent: Startup code & Reset Vector
-#cortex-m-rt = "0.7.5"
 cortex-m-rt = "0.6.15"
 
 # 3. The "CMSIS-SVD" Equivalent: Peripheral Access Crate (PAC)
 # This provides all the registers for the LPC55S69 Core 0
-lpc55-pac = "0.5.0"
+lpc55-pac = "0.4.1"
 
 # 4. The Hardware Abstraction Layer (HAL)
 # Higher-level drivers for GPIO, UART, Clocks, etc.
