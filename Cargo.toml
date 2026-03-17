@@ -1,5 +1,5 @@
 [workspace]
-members = ["kernel", "boards/lpc55s69"]
+members = ["rtsc", "boards/lpc55s69"]
 resolver = "2"
 
 [workspace.package]

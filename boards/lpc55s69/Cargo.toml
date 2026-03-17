@@ -11,7 +11,7 @@ rtt-target.workspace = true
 lpc55-hal.workspace = true
 lpc55-pac = { workspace = true, features = ["rt"] }
 panic-halt.workspace = true
-kernel = { path = "../../kernel" }
+rtsc= { path = "../../rtsc" }
 
 [[bin]]
 name = "lpc55s69"

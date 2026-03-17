@@ -2,9 +2,9 @@
 #![no_main]
 
 use core::sync::atomic::{AtomicBool, Ordering};
-use cortex_m::peripheral::{NVIC, syst::SystClkSource};
+use cortex_m::peripheral::{SYST, NVIC, syst::SystClkSource};
 use cortex_m_rt::{entry, exception};
-use kernel as _;
+use rtsc as _;
 use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
@@ -13,12 +13,17 @@ use lpc55_hal::raw::interrupt;
 use rtt_target::{rprintln, rtt_init_print};
 
 static TICK: AtomicBool = AtomicBool::new(false);
+const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
 
+    //let mut cp = Peripherals::take().unwrap();
     let mut hal = hal::new();
+
+    // Set systick at 1Hz
+    set_systick(&mut hal.SYST, 1000);
 
     let clocks = hal::ClockRequirements::default()
         .system_frequency(12.MHz())
@@ -41,20 +46,12 @@ fn main() -> ! {
         .0
         .enabled(&mut hal.syscon, clocks.support_1mhz_fro_token().unwrap());
 
-    // 1 Hz periodic interrupt from MR0
-    //ctimer0.mr[0].write(|w| unsafe { w.match_().bits(1_000_000) });
+    // 0.2 Hz periodic interrupt from MR0
     ctimer0.mr[0].write(|w| unsafe { w.match_().bits(5_000_000) });
     ctimer0.mcr.modify(|_, w| w.mr0i().set_bit().mr0r().set_bit());
     ctimer0.tcr.write(|w| w.cen().enabled());
 
     unsafe { NVIC::unmask(hal::raw::Interrupt::CTIMER0) };
-
-    // 1 Hz SysTick from the 12 MHz core clock.
-    hal.SYST.set_clock_source(SystClkSource::Core);
-    hal.SYST.set_reload(12_000_000 - 1);
-    hal.SYST.clear_current();
-    hal.SYST.enable_interrupt();
-    hal.SYST.enable_counter();
 
     loop {
         if TICK.swap(false, Ordering::AcqRel) {
@@ -83,4 +80,20 @@ fn CTIMER0() {
     p.CTIMER0.ir.write(|w| w.mr0int().set_bit());
 
     TICK.store(true, Ordering::Release);
+}
+
+pub fn set_systick(syst:&mut SYST, _dur_msec:u32) {
+    let ticks_per_ms = SYS_CLK_FREQ / 1000;
+    let reload = _dur_msec
+    .checked_mul(ticks_per_ms)
+    .and_then(|v| v.checked_sub(1))
+    .unwrap();
+
+    assert!(reload <= 0x00FF_FFFF);
+
+    syst.set_clock_source(SystClkSource::Core);
+    syst.set_reload(reload);
+    syst.clear_current();
+    syst.enable_interrupt();
+    syst.enable_counter();
 }

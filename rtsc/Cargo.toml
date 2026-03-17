@@ -1,11 +1,11 @@
 [package]
-name = "kernel"
+name = "rtsc"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
 
 [lib]
-name = "kernel"
+name = "rtsc"
 test = false
 bench = false
 
