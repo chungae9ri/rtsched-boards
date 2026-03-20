@@ -3,7 +3,7 @@
 
 use core::sync::atomic::{AtomicBool, Ordering};
 use cortex_m::peripheral::{SYST, NVIC, syst::SystClkSource};
-use cortex_m_rt::{entry, exception};
+use cortex_m_rt::entry;
 use rtsc as _;
 use panic_halt as _;
 
@@ -67,10 +67,6 @@ fn main() -> ! {
     }
 }
 
-#[exception]
-fn SysTick() {
-   rprintln!("SysTick");
-}
 
 #[interrupt]
 fn CTIMER0() {
