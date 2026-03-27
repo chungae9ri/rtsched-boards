@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+use core::ffi::c_void;
 use core::sync::atomic::{AtomicBool, Ordering};
 use cortex_m::peripheral::{SYST, NVIC, syst::SystClkSource};
 use cortex_m_rt::entry;
@@ -13,7 +14,15 @@ use lpc55_hal::raw::interrupt;
 use rtt_target::{rprintln, rtt_init_print};
 
 static TICK: AtomicBool = AtomicBool::new(false);
+const FORKYI_STACK_LEN: usize = 1024;
+static mut FORKYI_STACK: [u32; FORKYI_STACK_LEN] = [0; FORKYI_STACK_LEN];
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
+
+extern "C" fn forkyi_task(_arg: *mut c_void) -> ! {
+    loop {
+        cortex_m::asm::nop();
+    }
+}
 
 #[entry]
 fn main() -> ! {
@@ -52,6 +61,13 @@ fn main() -> ! {
     ctimer0.tcr.write(|w| w.cen().enabled());
 
     unsafe { NVIC::unmask(hal::raw::Interrupt::CTIMER0) };
+    let _forkyi_sp = unsafe {
+        rtsc::forkyi(
+            core::ptr::addr_of_mut!(FORKYI_STACK).cast::<u32>().add(FORKYI_STACK_LEN),
+            forkyi_task,
+            core::ptr::null_mut(),
+        )
+    };
 
     loop {
         if TICK.swap(false, Ordering::AcqRel) {
