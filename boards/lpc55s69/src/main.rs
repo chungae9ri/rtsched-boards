@@ -1,19 +1,17 @@
 #![no_std]
 #![no_main]
 
+mod ctimer;
+
 use core::ffi::c_void;
-use core::sync::atomic::{AtomicBool, Ordering};
-use cortex_m::peripheral::{SYST, NVIC, syst::SystClkSource};
+use cortex_m::peripheral::{SYST, syst::SystClkSource};
 use cortex_m_rt::entry;
-use rtsc as _;
 use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
-use lpc55_hal::raw::interrupt;
 use rtt_target::{rprintln, rtt_init_print};
 
-static TICK: AtomicBool = AtomicBool::new(false);
 const FORKYI_STACK_LEN: usize = 1024;
 static mut FORKYI_STACK: [u32; FORKYI_STACK_LEN] = [0; FORKYI_STACK_LEN];
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
@@ -28,7 +26,6 @@ extern "C" fn forkyi_task(_arg: *mut c_void) -> ! {
 fn main() -> ! {
     rtt_init_print!();
 
-    //let mut cp = Peripherals::take().unwrap();
     let mut hal = hal::new();
 
     // Set systick at 1Hz
@@ -49,18 +46,11 @@ fn main() -> ! {
         .into_output(Level::High);
     let mut red_high = true;
 
-    // Enable CTIMER0 @ 1 MHz source (from HAL token)
-    let ctimer0 = hal
-        .ctimer
-        .0
-        .enabled(&mut hal.syscon, clocks.support_1mhz_fro_token().unwrap());
-
-    // 0.2 Hz periodic interrupt from MR0
-    ctimer0.mr[0].write(|w| unsafe { w.match_().bits(5_000_000) });
-    ctimer0.mcr.modify(|_, w| w.mr0i().set_bit().mr0r().set_bit());
-    ctimer0.tcr.write(|w| w.cen().enabled());
-
-    unsafe { NVIC::unmask(hal::raw::Interrupt::CTIMER0) };
+    ctimer::configure(
+        hal.ctimer.0,
+        &mut hal.syscon,
+        clocks.support_1mhz_fro_token().unwrap(),
+    );
     let _forkyi_sp = unsafe {
         rtsc::forkyi(
             core::ptr::addr_of_mut!(FORKYI_STACK).cast::<u32>().add(FORKYI_STACK_LEN),
@@ -70,7 +60,7 @@ fn main() -> ! {
     };
 
     loop {
-        if TICK.swap(false, Ordering::AcqRel) {
+        if ctimer::take_tick() {
             if red_high {
                 red.set_low().ok();
                 rprintln!("set red low");
@@ -81,17 +71,6 @@ fn main() -> ! {
             red_high = !red_high;
         }
     }
-}
-
-
-#[interrupt]
-fn CTIMER0() {
-    let p = unsafe { hal::raw::Peripherals::steal() };
-
-    // Clear match-0 interrupt flag (mandatory)
-    p.CTIMER0.ir.write(|w| w.mr0int().set_bit());
-
-    TICK.store(true, Ordering::Release);
 }
 
 pub fn set_systick(syst:&mut SYST, _dur_msec:u32) {
