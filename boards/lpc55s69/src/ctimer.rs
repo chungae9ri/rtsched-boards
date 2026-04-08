@@ -14,7 +14,9 @@ pub fn configure(
 
     // 0.2 Hz periodic interrupt from MR0.
     ctimer0.mr[0].write(|w| unsafe { w.match_().bits(5_000_000) });
-    ctimer0.mcr.modify(|_, w| w.mr0i().set_bit().mr0r().set_bit());
+    ctimer0
+        .mcr
+        .modify(|_, w| w.mr0i().set_bit().mr0r().set_bit());
     ctimer0.tcr.write(|w| w.cen().enabled());
 
     unsafe { NVIC::unmask(hal::raw::Interrupt::CTIMER0) };
