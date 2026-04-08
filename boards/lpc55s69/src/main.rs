@@ -10,6 +10,8 @@ use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
+use rtsc::Task;
+use rtsc::init_current;
 use rtt_target::{rprintln, rtt_init_print};
 
 const FORKYI_STACK_LEN: usize = 1024;
@@ -27,6 +29,27 @@ fn main() -> ! {
     rtt_init_print!();
 
     let mut hal = hal::new();
+    // Initialize current task context
+    static mut MAIN_THREAD: Task = Task {
+        sp: 0,
+        id: 0,
+        name: "main",
+        priority: 0,
+        state: rtsc::TaskState::Ready,
+        callee_saved_regs: rtsc::CalleeSavedRegisters {
+            r4: 0,
+            r5: 0,
+            r6: 0,
+            r7: 0,
+            r8: 0,
+            r9: 0,
+            r10: 0,
+            r11: 0,
+        },
+    };
+    unsafe {
+        init_current(&raw mut MAIN_THREAD);
+    }
 
     // Set systick at 1Hz
     set_systick(&mut hal.SYST, 1000);
@@ -51,9 +74,13 @@ fn main() -> ! {
         &mut hal.syscon,
         clocks.support_1mhz_fro_token().unwrap(),
     );
+
+    // Fork a new task using the forkyi
     let _forkyi_sp = unsafe {
         rtsc::forkyi(
-            core::ptr::addr_of_mut!(FORKYI_STACK).cast::<u32>().add(FORKYI_STACK_LEN),
+            core::ptr::addr_of_mut!(FORKYI_STACK)
+                .cast::<u32>()
+                .add(FORKYI_STACK_LEN),
             forkyi_task,
             core::ptr::null_mut(),
         )
@@ -73,12 +100,12 @@ fn main() -> ! {
     }
 }
 
-pub fn set_systick(syst:&mut SYST, _dur_msec:u32) {
+pub fn set_systick(syst: &mut SYST, _dur_msec: u32) {
     let ticks_per_ms = SYS_CLK_FREQ / 1000;
     let reload = _dur_msec
-    .checked_mul(ticks_per_ms)
-    .and_then(|v| v.checked_sub(1))
-    .unwrap();
+        .checked_mul(ticks_per_ms)
+        .and_then(|v| v.checked_sub(1))
+        .unwrap();
 
     assert!(reload <= 0x00FF_FFFF);
 
