@@ -32,6 +32,7 @@ fn main() -> ! {
     // Initialize current task context
     static mut MAIN_THREAD: Task = Task {
         sp: 0,
+        exc_return: 0xFFFF_FFF9,
         id: 0,
         name: "main",
         priority: 0,
@@ -51,8 +52,8 @@ fn main() -> ! {
         init_current(&raw mut MAIN_THREAD);
     }
 
-    // Set systick at 1Hz
-    set_systick(&mut hal.SYST, 1000);
+    // Set systick at 1000Hz
+    set_systick(&mut hal.SYST, 1);
 
     let clocks = hal::ClockRequirements::default()
         .system_frequency(12.MHz())
