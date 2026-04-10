@@ -1,0 +1,43 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "probe-rs gdb server",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "probe-rs gdb --gdb-connection-string localhost:1337 --chip LPC55S69JBD100 --probe 1366:0105:000720762184 --protocol swd --speed 100 \"${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/lpc55s69\" & echo $! > \"${workspaceFolder}/.vscode/probe-rs-gdb.pid\"; wait $!"
+      ],
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "custom",
+        "fileLocation": "absolute",
+        "pattern": {
+          "regexp": "^(.*)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "."
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": false
+      }
+    },
+    {
+      "label": "stop probe-rs gdb server",
+      "type": "shell",
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if [ -f \"${workspaceFolder}/.vscode/probe-rs-gdb.pid\" ]; then kill \"$(cat \"${workspaceFolder}/.vscode/probe-rs-gdb.pid\")\" 2>/dev/null || true; rm -f \"${workspaceFolder}/.vscode/probe-rs-gdb.pid\"; fi"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

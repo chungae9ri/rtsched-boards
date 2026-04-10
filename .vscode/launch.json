@@ -65,6 +65,22 @@
         }
       ],
       "consoleLogLevel": "Console"
+    },
+    {
+      "name": "cortex-debug Attach via probe-rs gdb",
+      "type": "cortex-debug",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "probe-rs gdb server",
+      "postDebugTask": "stop probe-rs gdb server",
+      "servertype": "external",
+      "gdbTarget": "localhost:1337",
+      "device": "LPC55S69JBD100",
+      "interface": "swd",
+      "armToolchainPath": "/usr/bin",
+      "gdbPath": "arm-none-eabi-gdb",
+      "executable": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/lpc55s69",
+      "runToEntryPoint": "main"
     }
   ]
 }
