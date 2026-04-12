@@ -11,49 +11,118 @@ use panic_halt as _;
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
 use rtsc::Task;
-use rtsc::init_current;
+use rtsc::{AlignedStack, init_rq, start_first_task};
+
 use rtt_target::{rprintln, rtt_init_print};
 
-const FORKYI_STACK_LEN: usize = 1024;
-static mut FORKYI_STACK: [u32; FORKYI_STACK_LEN] = [0; FORKYI_STACK_LEN];
+const STACK_LEN: usize = 1024;
+static mut BOOT_HAL: Option<hal::Peripherals> = None;
+
+/// Main thread context and dedicated stack.
+///
+/// The reset handler enters `main` using MSP. We synthesize an initial task
+/// frame for the real application thread and start it through the same restore
+/// path used by every other task.
+static mut MAIN_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
+static mut MAIN_THREAD: Task = Task {
+    sp: 0,
+    exc_return: 0xFFFF_FFFD,
+    id: 0,
+    name: "main",
+    priority: 0,
+    state: rtsc::TaskState::Ready,
+    callee_saved_regs: rtsc::CalleeSavedRegisters {
+        r4: 0,
+        r5: 0,
+        r6: 0,
+        r7: 0,
+        r8: 0,
+        r9: 0,
+        r10: 0,
+        r11: 0,
+    },
+};
+
+static mut FORKYI_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
+static mut FORKYI_THREAD: Task = Task {
+    sp: 0,
+    exc_return: 0,
+    id: 0,
+    name: "",
+    priority: 0,
+    state: rtsc::TaskState::Suspended,
+    callee_saved_regs: rtsc::CalleeSavedRegisters {
+        r4: 0,
+        r5: 0,
+        r6: 0,
+        r7: 0,
+        r8: 0,
+        r9: 0,
+        r10: 0,
+        r11: 0,
+    },
+};
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 
 extern "C" fn forkyi_task(_arg: *mut c_void) -> ! {
     loop {
         cortex_m::asm::nop();
+        //rprintln!("Hello from forkyi task!");
     }
 }
 
 #[entry]
 fn main() -> ! {
+    let mut hal = hal::new();
+
+    unsafe {
+        // Configure SysTick before handing the HAL instance to the first task.
+        // This should generate the first SysTick interrupt after all threads forked
+        // and ready to be scheduled (context switch out).
+	// Systick frequency is 100Hz
+        set_systick(&mut hal.SYST, 10);
+        BOOT_HAL = Some(hal);
+
+        rtsc::forkyi(
+            &raw mut MAIN_THREAD,
+            core::ptr::addr_of_mut!(MAIN_STACK)
+                .cast::<AlignedStack<STACK_LEN>>()
+                .cast::<u32>()
+                .add(STACK_LEN),
+            runtime_main,
+            core::ptr::null_mut(),
+            0,
+            "main",
+            0,
+            rtsc::TaskState::Ready,
+        );
+        rtsc::forkyi(
+            &raw mut FORKYI_THREAD,
+            core::ptr::addr_of_mut!(FORKYI_STACK)
+                .cast::<AlignedStack<STACK_LEN>>()
+                .cast::<u32>()
+                .add(STACK_LEN),
+            forkyi_task,
+            core::ptr::null_mut(),
+            1,
+            "forkyi",
+            1,
+            rtsc::TaskState::Ready,
+        );
+        init_rq(&raw mut MAIN_THREAD, &raw mut FORKYI_THREAD);
+        start_first_task(&raw mut MAIN_THREAD)
+    }
+}
+
+extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     rtt_init_print!();
 
-    let mut hal = hal::new();
-    // Initialize current task context
-    static mut MAIN_THREAD: Task = Task {
-        sp: 0,
-        exc_return: 0xFFFF_FFF9,
-        id: 0,
-        name: "main",
-        priority: 0,
-        state: rtsc::TaskState::Ready,
-        callee_saved_regs: rtsc::CalleeSavedRegisters {
-            r4: 0,
-            r5: 0,
-            r6: 0,
-            r7: 0,
-            r8: 0,
-            r9: 0,
-            r10: 0,
-            r11: 0,
-        },
+    let mut hal = unsafe {
+        let slot = core::ptr::addr_of_mut!(BOOT_HAL);
+        let hal = slot.read().unwrap();
+        slot.write(None);
+        hal
     };
-    unsafe {
-        init_current(&raw mut MAIN_THREAD);
-    }
-
-    // Set systick at 1000Hz
-    set_systick(&mut hal.SYST, 1);
 
     let clocks = hal::ClockRequirements::default()
         .system_frequency(12.MHz())
@@ -75,17 +144,6 @@ fn main() -> ! {
         &mut hal.syscon,
         clocks.support_1mhz_fro_token().unwrap(),
     );
-
-    // Fork a new task using the forkyi
-    let _forkyi_sp = unsafe {
-        rtsc::forkyi(
-            core::ptr::addr_of_mut!(FORKYI_STACK)
-                .cast::<u32>()
-                .add(FORKYI_STACK_LEN),
-            forkyi_task,
-            core::ptr::null_mut(),
-        )
-    };
 
     loop {
         if ctimer::take_tick() {
