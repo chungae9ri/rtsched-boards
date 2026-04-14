@@ -1,0 +1,3 @@
+[submodule "rtsc"]
+	path = rtsc
+	url = git@github.com:chungae9ri/rtsc.git
