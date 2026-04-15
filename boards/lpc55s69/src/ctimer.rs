@@ -13,7 +13,7 @@ pub fn configure(
     let ctimer0 = ctimer0.enabled(syscon, token);
 
     // 0.2 Hz periodic interrupt from MR0.
-    ctimer0.mr[0].write(|w| unsafe { w.match_().bits(5_000_000) });
+    ctimer0.mr[0].write(|w| unsafe { w.match_().bits(1_000_000) });
     ctimer0
         .mcr
         .modify(|_, w| w.mr0i().set_bit().mr0r().set_bit());
