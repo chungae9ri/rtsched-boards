@@ -31,6 +31,7 @@ static mut MAIN_THREAD: Task = Task {
     name: "main",
     priority: 0,
     state: rtsc::TaskState::Ready,
+    sched_entity: rtsc::rbtree::sched_entity::new(0),
     callee_saved_regs: rtsc::CalleeSavedRegisters {
         r4: 0,
         r5: 0,
@@ -51,6 +52,7 @@ static mut FORKYI_THREAD: Task = Task {
     name: "",
     priority: 0,
     state: rtsc::TaskState::Suspended,
+    sched_entity: rtsc::rbtree::sched_entity::new(0),
     callee_saved_regs: rtsc::CalleeSavedRegisters {
         r4: 0,
         r5: 0,
@@ -65,9 +67,12 @@ static mut FORKYI_THREAD: Task = Task {
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 
 extern "C" fn forkyi_task(_arg: *mut c_void) -> ! {
+    let mut cnt: u32 = 0;
+
     loop {
+        cnt += 1;
         cortex_m::asm::nop();
-        //rprintln!("Hello from forkyi task!");
+        rprintln!("forkyi task: {}", cnt);
     }
 }
 
@@ -79,9 +84,10 @@ fn main() -> ! {
         // Configure SysTick before handing the HAL instance to the first task.
         // This should generate the first SysTick interrupt after all threads forked
         // and ready to be scheduled (context switch out).
-	// Systick frequency is 100Hz
+        // Systick frequency is 100Hz
         set_systick(&mut hal.SYST, 10);
         BOOT_HAL = Some(hal);
+        init_rq();
 
         rtsc::forkyi(
             &raw mut MAIN_THREAD,
@@ -94,7 +100,6 @@ fn main() -> ! {
             0,
             "main",
             0,
-            rtsc::TaskState::Ready,
         );
         rtsc::forkyi(
             &raw mut FORKYI_THREAD,
@@ -107,9 +112,7 @@ fn main() -> ! {
             1,
             "forkyi",
             1,
-            rtsc::TaskState::Ready,
         );
-        init_rq(&raw mut MAIN_THREAD, &raw mut FORKYI_THREAD);
         start_first_task(&raw mut MAIN_THREAD)
     }
 }
