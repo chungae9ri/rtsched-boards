@@ -11,7 +11,7 @@ use panic_halt as _;
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
 use rtsc::Task;
-use rtsc::{AlignedStack, init_rq, start_first_task};
+use rtsc::{AlignedStack, init_rq, spawn_main_task};
 
 use rtt_target::{rprintln, rtt_init_print};
 
@@ -31,7 +31,7 @@ static mut MAIN_THREAD: Task = Task {
     name: "main",
     priority: 0,
     state: rtsc::TaskState::Ready,
-    sched_entity: rtsc::rbtree::sched_entity::new(0),
+    sched_entity: rtsc::sched::sched_entity::new(0),
     callee_saved_regs: rtsc::CalleeSavedRegisters {
         r4: 0,
         r5: 0,
@@ -52,7 +52,7 @@ static mut FORKYI_THREAD: Task = Task {
     name: "",
     priority: 0,
     state: rtsc::TaskState::Suspended,
-    sched_entity: rtsc::rbtree::sched_entity::new(0),
+    sched_entity: rtsc::sched::sched_entity::new(0),
     callee_saved_regs: rtsc::CalleeSavedRegisters {
         r4: 0,
         r5: 0,
@@ -113,7 +113,7 @@ fn main() -> ! {
             "forkyi",
             1,
         );
-        start_first_task(&raw mut MAIN_THREAD)
+        spawn_main_task(&raw mut MAIN_THREAD)
     }
 }
 
