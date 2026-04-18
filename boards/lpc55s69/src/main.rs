@@ -4,6 +4,7 @@
 mod ctimer;
 
 use core::ffi::c_void;
+use core::mem::MaybeUninit;
 use cortex_m::peripheral::{SYST, syst::SystClkSource};
 use cortex_m_rt::entry;
 use panic_halt as _;
@@ -24,46 +25,10 @@ static mut BOOT_HAL: Option<hal::Peripherals> = None;
 /// frame for the real application thread and start it through the same restore
 /// path used by every other task.
 static mut MAIN_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut MAIN_THREAD: Task = Task {
-    sp: 0,
-    exc_return: 0xFFFF_FFFD,
-    id: 0,
-    name: "main",
-    priority: 0,
-    state: rtsc::TaskState::Ready,
-    sched_entity: rtsc::sched::sched_entity::new(0),
-    callee_saved_regs: rtsc::CalleeSavedRegisters {
-        r4: 0,
-        r5: 0,
-        r6: 0,
-        r7: 0,
-        r8: 0,
-        r9: 0,
-        r10: 0,
-        r11: 0,
-    },
-};
+static mut MAIN_THREAD: MaybeUninit<Task> = MaybeUninit::uninit();
 
 static mut FORKYI_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut FORKYI_THREAD: Task = Task {
-    sp: 0,
-    exc_return: 0,
-    id: 0,
-    name: "",
-    priority: 0,
-    state: rtsc::TaskState::Suspended,
-    sched_entity: rtsc::sched::sched_entity::new(0),
-    callee_saved_regs: rtsc::CalleeSavedRegisters {
-        r4: 0,
-        r5: 0,
-        r6: 0,
-        r7: 0,
-        r8: 0,
-        r9: 0,
-        r10: 0,
-        r11: 0,
-    },
-};
+static mut FORKYI_THREAD: MaybeUninit<Task> = MaybeUninit::uninit();
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 
 extern "C" fn forkyi_task(_arg: *mut c_void) -> ! {
@@ -90,7 +55,7 @@ fn main() -> ! {
         init_rq();
 
         rtsc::forkyi(
-            &raw mut MAIN_THREAD,
+            core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Task>(),
             core::ptr::addr_of_mut!(MAIN_STACK)
                 .cast::<AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
@@ -102,7 +67,7 @@ fn main() -> ! {
             0,
         );
         rtsc::forkyi(
-            &raw mut FORKYI_THREAD,
+            core::ptr::addr_of_mut!(FORKYI_THREAD).cast::<Task>(),
             core::ptr::addr_of_mut!(FORKYI_STACK)
                 .cast::<AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
@@ -113,7 +78,7 @@ fn main() -> ! {
             "forkyi",
             1,
         );
-        spawn_main_task(&raw mut MAIN_THREAD)
+        spawn_main_task(core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Task>())
     }
 }
 
