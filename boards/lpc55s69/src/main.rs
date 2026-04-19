@@ -63,8 +63,8 @@ fn main() -> ! {
             runtime_main,
             core::ptr::null_mut(),
             0,
-            "main",
-            0,
+            "idle",
+            4,
         );
         rtsc::forkyi(
             core::ptr::addr_of_mut!(FORKYI_THREAD).cast::<Task>(),
@@ -75,7 +75,7 @@ fn main() -> ! {
             forkyi_task,
             core::ptr::null_mut(),
             1,
-            "forkyi",
+            "do_nothing_1",
             1,
         );
         spawn_main_task(core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Task>())
