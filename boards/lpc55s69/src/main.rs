@@ -13,8 +13,8 @@ use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
-use rtsc::Task;
-use rtsc::{AlignedStack, init_rq, spawn_main_task};
+use rtsc::Thread;
+use rtsc::{AlignedStack, init_rq, spawn_main_thread};
 
 use crate::drivers::uart;
 use crate::hal::drivers::Serial;
@@ -27,16 +27,16 @@ static UART_READY: AtomicBool = AtomicBool::new(false);
 
 /// Main thread context and dedicated stack.
 ///
-/// The reset handler enters `main` using MSP. We synthesize an initial task
+/// The reset handler enters `main` using MSP. We synthesize an initial thread
 /// frame for the real application thread and start it through the same restore
-/// path used by every other task.
+/// path used by every other thread.
 static mut MAIN_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut MAIN_THREAD: MaybeUninit<Task> = MaybeUninit::uninit();
+static mut MAIN_THREAD: MaybeUninit<Thread> = MaybeUninit::uninit();
 
 static mut SHELL_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut SHELL_THREAD: MaybeUninit<Task> = MaybeUninit::uninit();
+static mut SHELL_THREAD: MaybeUninit<Thread> = MaybeUninit::uninit();
 static mut FORKYI_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut FORKYI_THREAD: MaybeUninit<Task> = MaybeUninit::uninit();
+static mut FORKYI_THREAD: MaybeUninit<Thread> = MaybeUninit::uninit();
 
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 
@@ -82,7 +82,7 @@ fn main() -> ! {
     let mut hal = hal::new();
 
     unsafe {
-        // Configure SysTick before handing the HAL instance to the first task.
+        // Configure SysTick before handing the HAL instance to the first thread.
         // This should generate the first SysTick interrupt after all threads forked
         // and ready to be scheduled (context switch out).
         // Systick frequency is 100Hz
@@ -91,7 +91,7 @@ fn main() -> ! {
         init_rq();
 
         rtsc::forkyi(
-            core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Task>(),
+            core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Thread>(),
             core::ptr::addr_of_mut!(MAIN_STACK)
                 .cast::<AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
@@ -103,7 +103,7 @@ fn main() -> ! {
             4,
         );
         rtsc::forkyi(
-            core::ptr::addr_of_mut!(SHELL_THREAD).cast::<Task>(),
+            core::ptr::addr_of_mut!(SHELL_THREAD).cast::<Thread>(),
             core::ptr::addr_of_mut!(SHELL_STACK)
                 .cast::<AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
@@ -115,7 +115,7 @@ fn main() -> ! {
             1,
         );
         rtsc::forkyi(
-            core::ptr::addr_of_mut!(FORKYI_THREAD).cast::<Task>(),
+            core::ptr::addr_of_mut!(FORKYI_THREAD).cast::<Thread>(),
             core::ptr::addr_of_mut!(FORKYI_STACK)
                 .cast::<AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
@@ -126,7 +126,7 @@ fn main() -> ! {
             "do_nothing_1",
             8,
         );
-        spawn_main_task(core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Task>())
+        spawn_main_thread(core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Thread>())
     }
 }
 
