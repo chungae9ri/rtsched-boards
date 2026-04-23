@@ -17,8 +17,8 @@ use lpc55_hal as hal;
 use rtsc::Thread;
 use rtsc::{AlignedStack, init_rq, spawn_main_thread};
 
-use rtt_target::{rprintln, rtt_init_print};
 use crate::hal::drivers::Serial;
+use rtt_target::{rprintln, rtt_init_print};
 
 const STACK_LEN: usize = 1024;
 const UART_BAUD: u32 = 115_200;
@@ -122,7 +122,10 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
         .into_output(Level::High);
     let mut red_high = true;
 
-    let usart = hal.flexcomm.0.enabled_as_usart(&mut hal.syscon, &flexcomm_token);
+    let usart = hal
+        .flexcomm
+        .0
+        .enabled_as_usart(&mut hal.syscon, &flexcomm_token);
     let tx = pins.pio0_30.into_usart0_tx_pin(&mut iocon);
     let rx = pins.pio0_29.into_usart0_rx_pin(&mut iocon);
     let config = hal::drivers::serial::config::Config::default().speed(UART_BAUD.Hz());
