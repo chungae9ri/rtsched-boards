@@ -9,7 +9,7 @@ use core::ffi::c_void;
 use core::mem::MaybeUninit;
 use core::sync::atomic::{AtomicBool, Ordering};
 use cortex_m::peripheral::{SYST, syst::SystClkSource};
-use cortex_m_rt::entry;
+use cortex_m_rt::{entry, exception};
 use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
@@ -22,6 +22,7 @@ use rtt_target::{rprintln, rtt_init_print};
 
 const STACK_LEN: usize = 1024;
 const UART_BAUD: u32 = 115_200;
+const CFS_SYSTICK_MS: u32 = 10;
 static mut BOOT_HAL: Option<hal::Peripherals> = None;
 pub(crate) static UART_READY: AtomicBool = AtomicBool::new(false);
 
@@ -39,6 +40,10 @@ static mut DO_NOTHING_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LE
 static mut DO_NOTHING_THREAD: MaybeUninit<Thread> = MaybeUninit::uninit();
 
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
+const TICKS_PER_MS: u32 = SYS_CLK_FREQ / 1000;
+const CFS_SYSTICK_TICK_COUNT: u32 = CFS_SYSTICK_MS * TICKS_PER_MS;
+static mut CFS_TIMER_ENTITY: rtsc::KTimerEntity =
+    rtsc::KTimerEntity::new(CFS_SYSTICK_TICK_COUNT, CFS_SYSTICK_TICK_COUNT);
 
 extern "C" fn do_nothing_task(_arg: *mut c_void) -> ! {
     loop {
@@ -52,10 +57,11 @@ fn main() -> ! {
 
     unsafe {
         // Configure SysTick before handing the HAL instance to the first thread.
-        // This should generate the first SysTick interrupt after all threads forked
-        // and ready to be scheduled (context switch out).
-        // Systick frequency is 100Hz
-        set_systick(&mut hal.SYST, 10);
+        // Seed the ktimer queue first so SysTick can be programmed from the
+        // earliest queued timer rather than a hard-coded reload value.
+        rtsc::init_ktimer_queue();
+        rtsc::enqueue_ktimer(core::ptr::addr_of_mut!(CFS_TIMER_ENTITY));
+        set_systick(&mut hal.SYST);
         BOOT_HAL = Some(hal);
         init_rq();
 
@@ -154,18 +160,17 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     }
 }
 
-pub fn set_systick(syst: &mut SYST, _dur_msec: u32) {
-    let ticks_per_ms = SYS_CLK_FREQ / 1000;
-    let reload = _dur_msec
-        .checked_mul(ticks_per_ms)
-        .and_then(|v| v.checked_sub(1))
-        .unwrap();
-
-    assert!(reload <= 0x00FF_FFFF);
+pub fn set_systick(syst: &mut SYST) {
+    let reload = rtsc::next_ktimer_systick_reload().unwrap();
 
     syst.set_clock_source(SystClkSource::Core);
     syst.set_reload(reload);
     syst.clear_current();
     syst.enable_interrupt();
     syst.enable_counter();
+}
+
+#[exception]
+fn SysTick() {
+    rtsc::handle_systick();
 }
