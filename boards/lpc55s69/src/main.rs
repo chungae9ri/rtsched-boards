@@ -14,8 +14,7 @@ use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
-use rtsc::{AlignedStack, init_cfs, spawn_main_thread};
-use rtsc::{Thread, ThreadType};
+use rtsc::{AlignedStack, CfsThread, RtThread, init_cfs, spawn_main_thread};
 
 use crate::hal::drivers::Serial;
 use rtt_target::{rprintln, rtt_init_print};
@@ -32,25 +31,35 @@ pub(crate) static UART_READY: AtomicBool = AtomicBool::new(false);
 /// frame for the real application thread and start it through the same restore
 /// path used by every other thread.
 static mut MAIN_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut MAIN_THREAD: MaybeUninit<Thread> = MaybeUninit::uninit();
+static mut MAIN_THREAD: MaybeUninit<CfsThread> = MaybeUninit::uninit();
 
 static mut SHELL_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut SHELL_THREAD: MaybeUninit<Thread> = MaybeUninit::uninit();
+static mut SHELL_THREAD: MaybeUninit<CfsThread> = MaybeUninit::uninit();
 static mut DO_NOTHING_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut DO_NOTHING_THREAD: MaybeUninit<Thread> = MaybeUninit::uninit();
+static mut DO_NOTHING_THREAD: MaybeUninit<CfsThread> = MaybeUninit::uninit();
 
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 const TICKS_PER_MS: u32 = SYS_CLK_FREQ / 1000;
 const CFS_PERIOD_TICKS: u32 = CFS_PERIOD_MS * TICKS_PER_MS;
 
 static mut RT_THREAD1_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut RT_THREAD1: MaybeUninit<Thread> = MaybeUninit::uninit();
+static mut RT_THREAD1: MaybeUninit<RtThread> = MaybeUninit::uninit();
 const RT_THREAD1_PERIOD_MS: u32 = 25;
 const RT_THREAD1_PERIOD_TICKS: u32 = RT_THREAD1_PERIOD_MS * TICKS_PER_MS;
-
 static mut RT_THREAD1_TIMER_ENTITY: rtsc::KTimerEntity = rtsc::KTimerEntity::new(
     RT_THREAD1_PERIOD_TICKS,
     RT_THREAD1_PERIOD_TICKS,
+    rtsc::KTimerType::Rt,
+    core::ptr::null_mut(),
+);
+
+static mut RT_THREAD2_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
+static mut RT_THREAD2: MaybeUninit<RtThread> = MaybeUninit::uninit();
+const RT_THREAD2_PERIOD_MS: u32 = 51;
+const RT_THREAD2_PERIOD_TICKS: u32 = RT_THREAD2_PERIOD_MS * TICKS_PER_MS;
+static mut RT_THREAD2_TIMER_ENTITY: rtsc::KTimerEntity = rtsc::KTimerEntity::new(
+    RT_THREAD2_PERIOD_TICKS,
+    RT_THREAD2_PERIOD_TICKS,
     rtsc::KTimerType::Rt,
     core::ptr::null_mut(),
 );
@@ -59,6 +68,15 @@ extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
         for i in 0..10 {
             rprintln!("rt_thread1 running at {}", i + 1);
+        }
+        rtsc::yieldyi();
+    }
+}
+
+extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
+    loop {
+        for i in 0..8 {
+            rprintln!("rt_thread2 running at {}", i + 1);
         }
         rtsc::yieldyi();
     }
@@ -83,8 +101,8 @@ fn main() -> ! {
         set_systick(&mut hal.SYST);
         BOOT_HAL = Some(hal);
 
-        rtsc::forkyi(
-            core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Thread>(),
+        let main_thread = rtsc::forkyi(
+            core::ptr::addr_of_mut!(MAIN_THREAD).cast::<CfsThread>(),
             core::ptr::addr_of_mut!(MAIN_STACK)
                 .cast::<AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
@@ -92,11 +110,10 @@ fn main() -> ! {
             runtime_main,
             core::ptr::null_mut(),
             "idle",
-            ThreadType::Cfs,
             4,
         );
         rtsc::forkyi(
-            core::ptr::addr_of_mut!(SHELL_THREAD).cast::<Thread>(),
+            core::ptr::addr_of_mut!(SHELL_THREAD).cast::<CfsThread>(),
             core::ptr::addr_of_mut!(SHELL_STACK)
                 .cast::<AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
@@ -104,11 +121,10 @@ fn main() -> ! {
             shell::shell_task,
             core::ptr::null_mut(),
             "shell",
-            ThreadType::Cfs,
             1,
         );
         rtsc::forkyi(
-            core::ptr::addr_of_mut!(DO_NOTHING_THREAD).cast::<Thread>(),
+            core::ptr::addr_of_mut!(DO_NOTHING_THREAD).cast::<CfsThread>(),
             core::ptr::addr_of_mut!(DO_NOTHING_STACK)
                 .cast::<AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
@@ -116,11 +132,10 @@ fn main() -> ! {
             do_nothing_task,
             core::ptr::null_mut(),
             "do_nothing_1",
-            ThreadType::Cfs,
             8,
         );
-        rtsc::forkyi(
-            core::ptr::addr_of_mut!(RT_THREAD1).cast::<Thread>(),
+        let rt_thread1 = rtsc::forkyi(
+            core::ptr::addr_of_mut!(RT_THREAD1).cast::<RtThread>(),
             core::ptr::addr_of_mut!(RT_THREAD1_STACK)
                 .cast::<AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
@@ -128,14 +143,26 @@ fn main() -> ! {
             rt_thread1_runner,
             core::ptr::null_mut(),
             "rt_thread1",
-            ThreadType::Rt,
-            4,
+            0, // Not used for RT thread
         );
-        (*core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY))
-            .init_thread(core::ptr::addr_of_mut!(RT_THREAD1).cast::<Thread>());
+        (*core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY)).init_thread(rt_thread1);
         rtsc::enqueue_ktimer(core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY));
 
-        spawn_main_thread(core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Thread>())
+        let rt_thread2 = rtsc::forkyi(
+            core::ptr::addr_of_mut!(RT_THREAD2).cast::<RtThread>(),
+            core::ptr::addr_of_mut!(RT_THREAD2_STACK)
+                .cast::<AlignedStack<STACK_LEN>>()
+                .cast::<u32>()
+                .add(STACK_LEN),
+            rt_thread2_runner,
+            core::ptr::null_mut(),
+            "rt_thread2",
+            0, // Not used for RT thread
+        );
+        (*core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY)).init_thread(rt_thread2);
+        rtsc::enqueue_ktimer(core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY));
+
+        spawn_main_thread(main_thread)
     }
 }
 
