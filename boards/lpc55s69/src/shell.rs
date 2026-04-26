@@ -88,13 +88,14 @@ fn dump_run_queue_uart() {
             }
 
             let thread_ref = &*thread;
+            let sched_entity = thread_ref.sched_entity();
             snapshot[snapshot_len] = ThreadSnapshot {
                 id: thread_ref.id,
                 name: thread_ref.name,
-                priority: thread_ref.sched_entity.priority,
+                priority: sched_entity.map_or(0, |entity| entity.priority),
                 state: thread_ref.state,
-                sched_tick_cnt: thread_ref.sched_entity.sched_tick_cnt(),
-                vruntime: thread_ref.sched_entity.vruntime(),
+                sched_tick_cnt: sched_entity.map_or(0, |entity| entity.sched_tick_cnt()),
+                vruntime: sched_entity.map_or(0, |entity| entity.vruntime()),
             };
             snapshot_len += 1;
             cursor = Some(thread);
