@@ -57,8 +57,10 @@ static mut RT_THREAD1_TIMER_ENTITY: rtsc::KTimerEntity = rtsc::KTimerEntity::new
 
 extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
-        rprintln!("rt_thread1 running at tick");
-        cortex_m::asm::nop();
+        for i in 0..10 {
+            rprintln!("rt_thread1 running at {}", i + 1);
+        }
+        rtsc::yieldyi();
     }
 }
 
