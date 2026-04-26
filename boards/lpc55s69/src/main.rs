@@ -14,15 +14,15 @@ use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
-use rtsc::Thread;
-use rtsc::{AlignedStack, init_rq, spawn_main_thread};
+use rtsc::{AlignedStack, init_cfs, spawn_main_thread};
+use rtsc::{Thread, ThreadType};
 
 use crate::hal::drivers::Serial;
 use rtt_target::{rprintln, rtt_init_print};
 
 const STACK_LEN: usize = 1024;
 const UART_BAUD: u32 = 115_200;
-const CFS_SYSTICK_MS: u32 = 10;
+const CFS_PERIOD_MS: u32 = 10;
 static mut BOOT_HAL: Option<hal::Peripherals> = None;
 pub(crate) static UART_READY: AtomicBool = AtomicBool::new(false);
 
@@ -41,9 +41,26 @@ static mut DO_NOTHING_THREAD: MaybeUninit<Thread> = MaybeUninit::uninit();
 
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 const TICKS_PER_MS: u32 = SYS_CLK_FREQ / 1000;
-const CFS_SYSTICK_TICK_COUNT: u32 = CFS_SYSTICK_MS * TICKS_PER_MS;
-static mut CFS_TIMER_ENTITY: rtsc::KTimerEntity =
-    rtsc::KTimerEntity::new(CFS_SYSTICK_TICK_COUNT, CFS_SYSTICK_TICK_COUNT);
+const CFS_PERIOD_TICKS: u32 = CFS_PERIOD_MS * TICKS_PER_MS;
+
+static mut RT_THREAD1_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
+static mut RT_THREAD1: MaybeUninit<Thread> = MaybeUninit::uninit();
+const RT_THREAD1_PERIOD_MS: u32 = 25;
+const RT_THREAD1_PERIOD_TICKS: u32 = RT_THREAD1_PERIOD_MS * TICKS_PER_MS;
+
+static mut RT_THREAD1_TIMER_ENTITY: rtsc::KTimerEntity = rtsc::KTimerEntity::new(
+    RT_THREAD1_PERIOD_TICKS,
+    RT_THREAD1_PERIOD_TICKS,
+    rtsc::KTimerType::Rt,
+    core::ptr::null_mut(),
+);
+
+extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
+    loop {
+        rprintln!("rt_thread1 running at tick");
+        cortex_m::asm::nop();
+    }
+}
 
 extern "C" fn do_nothing_task(_arg: *mut c_void) -> ! {
     loop {
@@ -60,10 +77,9 @@ fn main() -> ! {
         // Seed the ktimer queue first so SysTick can be programmed from the
         // earliest queued timer rather than a hard-coded reload value.
         rtsc::init_ktimer_queue();
-        rtsc::enqueue_ktimer(core::ptr::addr_of_mut!(CFS_TIMER_ENTITY));
+        init_cfs(CFS_PERIOD_TICKS);
         set_systick(&mut hal.SYST);
         BOOT_HAL = Some(hal);
-        init_rq();
 
         rtsc::forkyi(
             core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Thread>(),
@@ -74,6 +90,7 @@ fn main() -> ! {
             runtime_main,
             core::ptr::null_mut(),
             "idle",
+            ThreadType::Cfs,
             4,
         );
         rtsc::forkyi(
@@ -85,6 +102,7 @@ fn main() -> ! {
             shell::shell_task,
             core::ptr::null_mut(),
             "shell",
+            ThreadType::Cfs,
             1,
         );
         rtsc::forkyi(
@@ -96,8 +114,25 @@ fn main() -> ! {
             do_nothing_task,
             core::ptr::null_mut(),
             "do_nothing_1",
+            ThreadType::Cfs,
             8,
         );
+        rtsc::forkyi(
+            core::ptr::addr_of_mut!(RT_THREAD1).cast::<Thread>(),
+            core::ptr::addr_of_mut!(RT_THREAD1_STACK)
+                .cast::<AlignedStack<STACK_LEN>>()
+                .cast::<u32>()
+                .add(STACK_LEN),
+            rt_thread1_runner,
+            core::ptr::null_mut(),
+            "rt_thread1",
+            ThreadType::Rt,
+            4,
+        );
+        (*core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY))
+            .init_thread(core::ptr::addr_of_mut!(RT_THREAD1).cast::<Thread>());
+        rtsc::enqueue_ktimer(core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY));
+
         spawn_main_thread(core::ptr::addr_of_mut!(MAIN_THREAD).cast::<Thread>())
     }
 }
@@ -161,7 +196,7 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
 }
 
 pub fn set_systick(syst: &mut SYST) {
-    let reload = rtsc::next_ktimer_systick_reload().unwrap();
+    let reload = rtsc::next_ktimer_reload().unwrap();
 
     syst.set_clock_source(SystClkSource::Core);
     syst.set_reload(reload);
