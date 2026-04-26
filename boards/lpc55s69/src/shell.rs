@@ -112,7 +112,7 @@ fn dump_run_queue_uart() {
         uart_write_str(" state=");
         uart_write_str(thread_state_name(thread.state));
         uart_write_str(" ticks=");
-        uart_write_u32(thread.sched_tick_cnt);
+        uart_write_u64(thread.sched_tick_cnt);
         uart_write_str(" vruntime=");
         uart_write_u64(thread.vruntime);
         uart_write_str("\r\n");
@@ -192,7 +192,7 @@ struct ThreadSnapshot {
     name: &'static str,
     priority: u32,
     state: rtsc::ThreadState,
-    sched_tick_cnt: u32,
+    sched_tick_cnt: u64,
     vruntime: u64,
 }
 
