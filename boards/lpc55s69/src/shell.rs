@@ -2,7 +2,7 @@ use core::ffi::c_void;
 use core::sync::atomic::Ordering;
 
 use cortex_m::interrupt;
-use rtsc::traverse_run_queue;
+use rtsched::traverse_run_queue;
 use rtt_target::rprintln;
 
 use crate::drivers::uart;
@@ -178,12 +178,12 @@ fn ascii_debug(byte: u8) -> char {
     }
 }
 
-fn thread_state_name(state: rtsc::ThreadState) -> &'static str {
+fn thread_state_name(state: rtsched::ThreadState) -> &'static str {
     match state {
-        rtsc::ThreadState::Ready => "Ready",
-        rtsc::ThreadState::Running => "Running",
-        rtsc::ThreadState::Blocked => "Blocked",
-        rtsc::ThreadState::Suspended => "Suspended",
+        rtsched::ThreadState::Ready => "Ready",
+        rtsched::ThreadState::Running => "Running",
+        rtsched::ThreadState::Blocked => "Blocked",
+        rtsched::ThreadState::Suspended => "Suspended",
     }
 }
 
@@ -192,7 +192,7 @@ struct ThreadSnapshot {
     id: u32,
     name: &'static str,
     priority: u32,
-    state: rtsc::ThreadState,
+    state: rtsched::ThreadState,
     sched_tick_cnt: u64,
     vruntime: u64,
 }
@@ -203,7 +203,7 @@ impl Default for ThreadSnapshot {
             id: 0,
             name: "",
             priority: 0,
-            state: rtsc::ThreadState::Suspended,
+            state: rtsched::ThreadState::Suspended,
             sched_tick_cnt: 0,
             vruntime: 0,
         }
