@@ -43,7 +43,7 @@ const CFS_PERIOD_TICKS: u32 = CFS_PERIOD_MS * TICKS_PER_MS;
 
 static mut RT_THREAD1_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
 static mut RT_THREAD1: MaybeUninit<RtThread> = MaybeUninit::uninit();
-const RT_THREAD1_PERIOD_MS: u32 = 150;
+const RT_THREAD1_PERIOD_MS: u32 = 25;
 const RT_THREAD1_PERIOD_TICKS: u32 = RT_THREAD1_PERIOD_MS * TICKS_PER_MS;
 static mut RT_THREAD1_TIMER_ENTITY: rtsched::KTimerEntity = rtsched::KTimerEntity::new(
     RT_THREAD1_PERIOD_TICKS,
@@ -54,7 +54,7 @@ static mut RT_THREAD1_TIMER_ENTITY: rtsched::KTimerEntity = rtsched::KTimerEntit
 
 static mut RT_THREAD2_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
 static mut RT_THREAD2: MaybeUninit<RtThread> = MaybeUninit::uninit();
-const RT_THREAD2_PERIOD_MS: u32 = 200;
+const RT_THREAD2_PERIOD_MS: u32 = 20;
 const RT_THREAD2_PERIOD_TICKS: u32 = RT_THREAD2_PERIOD_MS * TICKS_PER_MS;
 static mut RT_THREAD2_TIMER_ENTITY: rtsched::KTimerEntity = rtsched::KTimerEntity::new(
     RT_THREAD2_PERIOD_TICKS,
