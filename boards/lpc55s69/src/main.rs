@@ -21,7 +21,8 @@ use rtt_target::{rprintln, rtt_init_print};
 
 const STACK_LEN: usize = 1024;
 const UART_BAUD: u32 = 115_200;
-const CFS_PERIOD_MS: u32 = 10;
+const CFS_EXEC_MS: u32 = 10;
+const CFS_PERIOD_MS: u32 = 20;
 pub(crate) static UART_READY: AtomicBool = AtomicBool::new(false);
 
 /// Main thread context and dedicated stack.
@@ -39,29 +40,22 @@ static mut DO_NOTHING_THREAD: MaybeUninit<CfsThread> = MaybeUninit::uninit();
 
 const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 const TICKS_PER_MS: u32 = SYS_CLK_FREQ / 1000;
+const CFS_EXEC_TICKS: u32 = CFS_EXEC_MS * TICKS_PER_MS;
 const CFS_PERIOD_TICKS: u32 = CFS_PERIOD_MS * TICKS_PER_MS;
 
 static mut RT_THREAD1_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
 static mut RT_THREAD1: MaybeUninit<RtThread> = MaybeUninit::uninit();
 const RT_THREAD1_PERIOD_MS: u32 = 25;
 const RT_THREAD1_PERIOD_TICKS: u32 = RT_THREAD1_PERIOD_MS * TICKS_PER_MS;
-static mut RT_THREAD1_TIMER_ENTITY: rtsched::KTimerEntity = rtsched::KTimerEntity::new(
-    RT_THREAD1_PERIOD_TICKS,
-    RT_THREAD1_PERIOD_TICKS,
-    rtsched::KTimerType::Rt,
-    core::ptr::null_mut(),
-);
+static mut RT_THREAD1_TIMER_ENTITY: rtsched::RtKTimer =
+    rtsched::RtKTimer::new(RT_THREAD1_PERIOD_TICKS, core::ptr::null_mut());
 
 static mut RT_THREAD2_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
 static mut RT_THREAD2: MaybeUninit<RtThread> = MaybeUninit::uninit();
 const RT_THREAD2_PERIOD_MS: u32 = 20;
 const RT_THREAD2_PERIOD_TICKS: u32 = RT_THREAD2_PERIOD_MS * TICKS_PER_MS;
-static mut RT_THREAD2_TIMER_ENTITY: rtsched::KTimerEntity = rtsched::KTimerEntity::new(
-    RT_THREAD2_PERIOD_TICKS,
-    RT_THREAD2_PERIOD_TICKS,
-    rtsched::KTimerType::Rt,
-    core::ptr::null_mut(),
-);
+static mut RT_THREAD2_TIMER_ENTITY: rtsched::RtKTimer =
+    rtsched::RtKTimer::new(RT_THREAD2_PERIOD_TICKS, core::ptr::null_mut());
 
 extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
@@ -91,7 +85,7 @@ extern "C" fn do_nothing_task(_arg: *mut c_void) -> ! {
     loop {
         for i in 0..10 {
             rprintln!("do_nothing_task running at {}", i + 1);
-            for _ in 0..100_000 {
+            for _ in 0..1000 {
                 cortex_m::asm::nop();
             }
         }
@@ -104,7 +98,7 @@ fn main() -> ! {
         rtt_init_print!();
 
         rtsched::init_ktimer_queue();
-        init_cfs(CFS_PERIOD_TICKS);
+        init_cfs(CFS_PERIOD_TICKS, CFS_EXEC_TICKS);
 
         let main_thread = rtsched::forkyi(
             core::ptr::addr_of_mut!(MAIN_THREAD).cast::<CfsThread>(),
@@ -151,8 +145,8 @@ fn main() -> ! {
             "rt_thread1",
             0, // Not used for RT thread
         );
-        (*core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY)).init_thread(rt_thread1);
-        rtsched::enqueue_ktimer(core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY));
+        (*core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY)).init_thread_ctx(rt_thread1);
+        rtsched::enqueue_ktimer((*core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY)).entity_mut());
 
         let rt_thread2 = rtsched::forkyi(
             core::ptr::addr_of_mut!(RT_THREAD2).cast::<RtThread>(),
@@ -165,15 +159,14 @@ fn main() -> ! {
             "rt_thread2",
             0, // Not used for RT thread
         );
-        (*core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY)).init_thread(rt_thread2);
-        rtsched::enqueue_ktimer(core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY));
+        (*core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY)).init_thread_ctx(rt_thread2);
+        rtsched::enqueue_ktimer((*core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY)).entity_mut());
 
         spawn_main_thread(main_thread)
     }
 }
 
 extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
-
     let mut hal = hal::new();
 
     let clocks = hal::ClockRequirements::default()
