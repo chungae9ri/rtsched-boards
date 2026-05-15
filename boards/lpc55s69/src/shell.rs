@@ -182,8 +182,7 @@ fn thread_state_name(state: rtsched::ThreadState) -> &'static str {
     match state {
         rtsched::ThreadState::Ready => "Ready",
         rtsched::ThreadState::Running => "Running",
-        rtsched::ThreadState::Blocked => "Blocked",
-        rtsched::ThreadState::Suspended => "Suspended",
+        rtsched::ThreadState::Waiting => "Waiting",
     }
 }
 
@@ -203,7 +202,7 @@ impl Default for ThreadSnapshot {
             id: 0,
             name: "",
             priority: 0,
-            state: rtsched::ThreadState::Suspended,
+            state: rtsched::ThreadState::Waiting,
             sched_tick_cnt: 0,
             vruntime: 0,
         }

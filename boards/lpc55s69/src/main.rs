@@ -38,8 +38,8 @@ static mut SHELL_THREAD: MaybeUninit<CfsThread> = MaybeUninit::uninit();
 static mut DO_NOTHING_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
 static mut DO_NOTHING_THREAD: MaybeUninit<CfsThread> = MaybeUninit::uninit();
 
-const SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
-const TICKS_PER_MS: u32 = SYS_CLK_FREQ / 1000;
+const BOARD_SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
+const TICKS_PER_MS: u32 = BOARD_SYS_CLK_FREQ / 1000;
 const CFS_EXEC_TICKS: u32 = CFS_EXEC_MS * TICKS_PER_MS;
 const CFS_PERIOD_TICKS: u32 = CFS_PERIOD_MS * TICKS_PER_MS;
 
@@ -97,6 +97,7 @@ fn main() -> ! {
     unsafe {
         rtt_init_print!();
 
+        rtsched::update_sys_clk_freq(BOARD_SYS_CLK_FREQ);
         rtsched::init_ktimer_queue();
         init_cfs(CFS_PERIOD_TICKS, CFS_EXEC_TICKS);
 
