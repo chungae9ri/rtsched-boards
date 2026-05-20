@@ -2,7 +2,7 @@ use core::ffi::c_void;
 use core::sync::atomic::Ordering;
 
 use cortex_m::interrupt;
-use rtsched::traverse_run_queue;
+use rtsched::{traverse_ktimer_queue_fn, traverse_run_queue};
 use rtt_target::rprintln;
 
 use crate::drivers::uart;
@@ -64,6 +64,7 @@ pub extern "C" fn shell_task(_arg: *mut c_void) -> ! {
 fn handle_shell_command(line: &[u8]) {
     match line {
         b"ps" => dump_run_queue_uart(),
+        b"tmr" => dump_ktimer_uart(),
         b"" => {}
         _ => {
             uart_write_str("unknown command: ");
@@ -122,6 +123,18 @@ fn dump_run_queue_uart() {
     if truncated {
         uart_write_str("  ... truncated ...\r\n");
     }
+}
+
+fn dump_ktimer_uart() {
+    uart_write_str("ktimer queue:\r\n");
+
+    traverse_ktimer_queue_fn(|name, deadline| {
+        uart_write_str("  name=");
+        uart_write_str(name);
+        uart_write_str(" deadline=");
+        uart_write_u32(deadline);
+        uart_write_str("\r\n");
+    });
 }
 
 fn uart_write_bytes(bytes: &[u8]) {

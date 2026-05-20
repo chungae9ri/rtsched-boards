@@ -48,14 +48,14 @@ static mut RT_THREAD1: MaybeUninit<RtThread> = MaybeUninit::uninit();
 const RT_THREAD1_PERIOD_MS: u32 = 25;
 const RT_THREAD1_PERIOD_TICKS: u32 = RT_THREAD1_PERIOD_MS * TICKS_PER_MS;
 static mut RT_THREAD1_TIMER_ENTITY: rtsched::RtKTimer =
-    rtsched::RtKTimer::new(RT_THREAD1_PERIOD_TICKS, core::ptr::null_mut());
+    rtsched::RtKTimer::new(RT_THREAD1_PERIOD_TICKS, core::ptr::null_mut(), "rt_thread1");
 
 static mut RT_THREAD2_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
 static mut RT_THREAD2: MaybeUninit<RtThread> = MaybeUninit::uninit();
 const RT_THREAD2_PERIOD_MS: u32 = 20;
 const RT_THREAD2_PERIOD_TICKS: u32 = RT_THREAD2_PERIOD_MS * TICKS_PER_MS;
 static mut RT_THREAD2_TIMER_ENTITY: rtsched::RtKTimer =
-    rtsched::RtKTimer::new(RT_THREAD2_PERIOD_TICKS, core::ptr::null_mut());
+    rtsched::RtKTimer::new(RT_THREAD2_PERIOD_TICKS, core::ptr::null_mut(), "rt_thread2");
 
 extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
