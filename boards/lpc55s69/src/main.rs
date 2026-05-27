@@ -22,7 +22,7 @@ use rtt_target::{rprintln, rtt_init_print};
 const STACK_LEN: usize = 1024;
 const UART_BAUD: u32 = 115_200;
 const CFS_EXEC_MS: u32 = 10;
-const CFS_PERIOD_MS: u32 = 20;
+const CFS_PERIOD_MS: u32 = 30;
 pub(crate) static UART_READY: AtomicBool = AtomicBool::new(false);
 
 /// Main thread context and dedicated stack.
@@ -59,9 +59,10 @@ static mut RT_THREAD2_TIMER_ENTITY: rtsched::RtKTimer =
 
 extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
+        rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
             rprintln!("rt_thread1 running at {}", i + 1);
-            for _ in 0..10000 {
+            for _ in 0..1000 {
                 cortex_m::asm::nop();
             }
         }
@@ -71,9 +72,10 @@ extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
 
 extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
     loop {
+        rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
             rprintln!("rt_thread2 running at {}", i + 1);
-            for _ in 0..10000 {
+            for _ in 0..1000 {
                 cortex_m::asm::nop();
             }
         }
@@ -174,6 +176,9 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
         .system_frequency(12.MHz())
         .configure(&mut hal.anactrl, &mut hal.pmc, &mut hal.syscon)
         .unwrap();
+    if !rtsched::init_dwt_cycle_counter(&mut hal.DCB, &mut hal.DWT) {
+        rprintln!("failed to initialize DWT cycle counter");
+    }
 
     let mut gpio = hal.gpio.enabled(&mut hal.syscon);
     let mut iocon = hal.iocon.enabled(&mut hal.syscon);
