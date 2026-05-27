@@ -1,6 +1,7 @@
 #![no_std]
 #![no_main]
 
+mod board_printf;
 mod ctimer;
 mod drivers;
 mod shell;
@@ -17,7 +18,7 @@ use lpc55_hal as hal;
 use rtsched::{AlignedStack, CfsThread, RtThread, init_cfs, spawn_main_thread};
 
 use crate::hal::drivers::Serial;
-use rtt_target::{rprintln, rtt_init_print};
+use rtt_target::rtt_init_print;
 
 const STACK_LEN: usize = 1024;
 const UART_BAUD: u32 = 115_200;
@@ -61,7 +62,7 @@ extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
         rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
-            rprintln!("rt_thread1 running at {}", i + 1);
+            board_print_thread_iteration("rt_thread1", i + 1);
             for _ in 0..1000 {
                 cortex_m::asm::nop();
             }
@@ -74,7 +75,7 @@ extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
     loop {
         rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
-            rprintln!("rt_thread2 running at {}", i + 1);
+            board_print_thread_iteration("rt_thread2", i + 1);
             for _ in 0..1000 {
                 cortex_m::asm::nop();
             }
@@ -86,7 +87,7 @@ extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
 extern "C" fn do_nothing_task(_arg: *mut c_void) -> ! {
     loop {
         for i in 0..10 {
-            rprintln!("do_nothing_task running at {}", i + 1);
+            board_print_thread_iteration("do_nothing_task", i + 1);
             for _ in 0..1000 {
                 cortex_m::asm::nop();
             }
@@ -177,7 +178,7 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
         .configure(&mut hal.anactrl, &mut hal.pmc, &mut hal.syscon)
         .unwrap();
     if !rtsched::init_dwt_cycle_counter(&mut hal.DCB, &mut hal.DWT) {
-        rprintln!("failed to initialize DWT cycle counter");
+        board_printf::board_printf("failed to initialize DWT cycle counter\r\n");
     }
 
     let mut gpio = hal.gpio.enabled(&mut hal.syscon);
@@ -200,8 +201,10 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     let config = hal::drivers::serial::config::Config::default().speed(UART_BAUD.Hz());
     let _serial = Serial::new(usart, (tx, rx), config);
 
-    rprintln!("uart ready on usart0 at {} baud", UART_BAUD);
     UART_READY.store(true, Ordering::Release);
+    board_printf::board_printf("uart ready on usart0 at ");
+    board_print_u32(UART_BAUD);
+    board_printf::board_printf(" baud\r\n");
 
     ctimer::configure(
         hal.ctimer.0,
@@ -214,10 +217,10 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
         if ctimer::take_tick() {
             if red_high {
                 red.set_low().ok();
-                rprintln!("set red low");
+                board_printf::board_printf("set red low\r\n");
             } else {
                 red.set_high().ok();
-                rprintln!("set red high");
+                board_printf::board_printf("set red high\r\n");
             }
             red_high = !red_high;
         }
@@ -237,4 +240,31 @@ pub fn set_systick(syst: &mut SYST) {
 #[exception]
 fn SysTick() {
     rtsched::handle_systick();
+}
+
+fn board_print_thread_iteration(name: &str, iteration: u32) {
+    board_printf::board_printf(name);
+    board_printf::board_printf(" running at ");
+    board_print_u32(iteration);
+    board_printf::board_printf("\r\n");
+}
+
+fn board_print_u32(mut value: u32) {
+    let mut buf = [0u8; 10];
+    let mut idx = buf.len();
+
+    if value == 0 {
+        board_printf::board_printf("0");
+        return;
+    }
+
+    while value != 0 {
+        idx -= 1;
+        buf[idx] = b'0' + (value % 10) as u8;
+        value /= 10;
+    }
+
+    if let Ok(message) = core::str::from_utf8(&buf[idx..]) {
+        board_printf::board_printf(message);
+    }
 }
