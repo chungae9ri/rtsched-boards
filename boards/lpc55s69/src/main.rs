@@ -15,7 +15,6 @@ use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
-use rtsched::{AlignedStack, CfsThread, RtThread, init_cfs, spawn_main_thread};
 
 use crate::hal::drivers::Serial;
 use rtt_target::rtt_init_print;
@@ -31,28 +30,31 @@ pub(crate) static UART_READY: AtomicBool = AtomicBool::new(false);
 /// The reset handler enters `main` using MSP. We synthesize an initial thread
 /// frame for the real application thread and start it through the same restore
 /// path used by every other thread.
-static mut MAIN_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut MAIN_THREAD: MaybeUninit<CfsThread> = MaybeUninit::uninit();
+static mut MAIN_STACK: rtsched::AlignedStack<STACK_LEN> = rtsched::AlignedStack([0; STACK_LEN]);
+static mut MAIN_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
 
-static mut SHELL_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut SHELL_THREAD: MaybeUninit<CfsThread> = MaybeUninit::uninit();
-static mut DO_NOTHING_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut DO_NOTHING_THREAD: MaybeUninit<CfsThread> = MaybeUninit::uninit();
+static mut SHELL_STACK: rtsched::AlignedStack<STACK_LEN> = rtsched::AlignedStack([0; STACK_LEN]);
+static mut SHELL_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
+static mut DO_NOTHING_STACK: rtsched::AlignedStack<STACK_LEN> =
+    rtsched::AlignedStack([0; STACK_LEN]);
+static mut DO_NOTHING_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
 
 const BOARD_SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 const TICKS_PER_MS: u32 = BOARD_SYS_CLK_FREQ / 1000;
 const CFS_EXEC_TICKS: u32 = CFS_EXEC_MS * TICKS_PER_MS;
 const CFS_PERIOD_TICKS: u32 = CFS_PERIOD_MS * TICKS_PER_MS;
 
-static mut RT_THREAD1_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut RT_THREAD1: MaybeUninit<RtThread> = MaybeUninit::uninit();
+static mut RT_THREAD1_STACK: rtsched::AlignedStack<STACK_LEN> =
+    rtsched::AlignedStack([0; STACK_LEN]);
+static mut RT_THREAD1: MaybeUninit<rtsched::RtThread> = MaybeUninit::uninit();
 const RT_THREAD1_PERIOD_MS: u32 = 100;
 const RT_THREAD1_PERIOD_TICKS: u32 = RT_THREAD1_PERIOD_MS * TICKS_PER_MS;
 static mut RT_THREAD1_TIMER_ENTITY: rtsched::RtKTimer =
     rtsched::RtKTimer::new(RT_THREAD1_PERIOD_TICKS, core::ptr::null_mut(), "rt_thread1");
 
-static mut RT_THREAD2_STACK: AlignedStack<STACK_LEN> = AlignedStack([0; STACK_LEN]);
-static mut RT_THREAD2: MaybeUninit<RtThread> = MaybeUninit::uninit();
+static mut RT_THREAD2_STACK: rtsched::AlignedStack<STACK_LEN> =
+    rtsched::AlignedStack([0; STACK_LEN]);
+static mut RT_THREAD2: MaybeUninit<rtsched::RtThread> = MaybeUninit::uninit();
 const RT_THREAD2_PERIOD_MS: u32 = 120;
 const RT_THREAD2_PERIOD_TICKS: u32 = RT_THREAD2_PERIOD_MS * TICKS_PER_MS;
 static mut RT_THREAD2_TIMER_ENTITY: rtsched::RtKTimer =
@@ -102,12 +104,12 @@ fn main() -> ! {
 
         rtsched::update_sys_clk_freq(BOARD_SYS_CLK_FREQ);
         rtsched::init_ktimer_queue();
-        init_cfs(CFS_PERIOD_TICKS, CFS_EXEC_TICKS);
+        rtsched::init_cfs(CFS_PERIOD_TICKS, CFS_EXEC_TICKS);
 
         let main_thread = rtsched::forkyi(
-            core::ptr::addr_of_mut!(MAIN_THREAD).cast::<CfsThread>(),
+            core::ptr::addr_of_mut!(MAIN_THREAD).cast::<rtsched::CfsThread>(),
             core::ptr::addr_of_mut!(MAIN_STACK)
-                .cast::<AlignedStack<STACK_LEN>>()
+                .cast::<rtsched::AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
                 .add(STACK_LEN),
             runtime_main,
@@ -116,9 +118,9 @@ fn main() -> ! {
             4,
         );
         rtsched::forkyi(
-            core::ptr::addr_of_mut!(SHELL_THREAD).cast::<CfsThread>(),
+            core::ptr::addr_of_mut!(SHELL_THREAD).cast::<rtsched::CfsThread>(),
             core::ptr::addr_of_mut!(SHELL_STACK)
-                .cast::<AlignedStack<STACK_LEN>>()
+                .cast::<rtsched::AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
                 .add(STACK_LEN),
             shell::shell_task,
@@ -127,9 +129,9 @@ fn main() -> ! {
             1,
         );
         rtsched::forkyi(
-            core::ptr::addr_of_mut!(DO_NOTHING_THREAD).cast::<CfsThread>(),
+            core::ptr::addr_of_mut!(DO_NOTHING_THREAD).cast::<rtsched::CfsThread>(),
             core::ptr::addr_of_mut!(DO_NOTHING_STACK)
-                .cast::<AlignedStack<STACK_LEN>>()
+                .cast::<rtsched::AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
                 .add(STACK_LEN),
             do_nothing_task,
@@ -139,9 +141,9 @@ fn main() -> ! {
         );
 
         let rt_thread1 = rtsched::forkyi(
-            core::ptr::addr_of_mut!(RT_THREAD1).cast::<RtThread>(),
+            core::ptr::addr_of_mut!(RT_THREAD1).cast::<rtsched::RtThread>(),
             core::ptr::addr_of_mut!(RT_THREAD1_STACK)
-                .cast::<AlignedStack<STACK_LEN>>()
+                .cast::<rtsched::AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
                 .add(STACK_LEN),
             rt_thread1_runner,
@@ -153,9 +155,9 @@ fn main() -> ! {
         rtsched::enqueue_ktimer((*core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY)).entity_mut());
 
         let rt_thread2 = rtsched::forkyi(
-            core::ptr::addr_of_mut!(RT_THREAD2).cast::<RtThread>(),
+            core::ptr::addr_of_mut!(RT_THREAD2).cast::<rtsched::RtThread>(),
             core::ptr::addr_of_mut!(RT_THREAD2_STACK)
-                .cast::<AlignedStack<STACK_LEN>>()
+                .cast::<rtsched::AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
                 .add(STACK_LEN),
             rt_thread2_runner,
@@ -166,7 +168,7 @@ fn main() -> ! {
         (*core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY)).init_thread_ctx(rt_thread2);
         rtsched::enqueue_ktimer((*core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY)).entity_mut());
 
-        spawn_main_thread(main_thread)
+        rtsched::spawn_main_thread(main_thread)
     }
 }
 
