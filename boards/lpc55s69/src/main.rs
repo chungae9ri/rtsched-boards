@@ -101,6 +101,7 @@ extern "C" fn do_nothing_task(_arg: *mut c_void) -> ! {
 fn main() -> ! {
     unsafe {
         rtt_init_print!();
+        rtsched::set_print_fn(board_printf::board_printf);
 
         rtsched::update_sys_clk_freq(BOARD_SYS_CLK_FREQ);
         rtsched::init_ktimer_queue();
