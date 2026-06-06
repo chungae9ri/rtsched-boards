@@ -90,9 +90,7 @@ extern "C" fn do_nothing_task(_arg: *mut c_void) -> ! {
     loop {
         for i in 0..10 {
             board_print_thread_iteration("do_nothing_task", i + 1);
-            for _ in 0..1000 {
-                cortex_m::asm::nop();
-            }
+            rtsched::msleepyi(5);
         }
     }
 }
