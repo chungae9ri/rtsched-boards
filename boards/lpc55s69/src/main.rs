@@ -65,6 +65,7 @@ extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
         rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
             board_print_thread_iteration("rt_thread1", i + 1);
+            rtsched::msleepyi(10);
             for _ in 0..1000 {
                 cortex_m::asm::nop();
             }
