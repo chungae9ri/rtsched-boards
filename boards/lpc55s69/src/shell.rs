@@ -152,6 +152,12 @@ fn dump_ktimer_queue() {
         shell_write_str(name);
         shell_write_str(" deadline=");
         shell_write_u32(deadline);
+        shell_write_str(" active=");
+        shell_write_str(if rtsched::is_active_ktimer(name) {
+            "yes"
+        } else {
+            "no"
+        });
         shell_write_str("\r\n");
     });
 }
