@@ -227,6 +227,7 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
             }
             red_high = !red_high;
         }
+        rtsched::msleepyi(5);
     }
 }
 
