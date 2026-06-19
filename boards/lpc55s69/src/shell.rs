@@ -2,7 +2,7 @@ use core::ffi::c_void;
 use core::sync::atomic::Ordering;
 
 use cortex_m::interrupt;
-use rtsched::{traverse_ktimer_queue_fn, traverse_run_queue};
+use rtsched::{traverse_ktimer_queue_fn, traverse_run_queue, traverse_wait_queue};
 use rtt_target::rprintln;
 
 use crate::board_printf;
@@ -142,6 +142,56 @@ fn dump_run_queue() {
     if truncated {
         shell_write_str("  ... truncated ...\r\n");
     }
+
+    dump_wait_queue();
+}
+
+fn dump_wait_queue() {
+    let mut snapshot = [WaitThreadSnapshot::default(); PS_SNAPSHOT_CAPACITY];
+    let mut snapshot_len = 0usize;
+    let mut truncated = false;
+
+    interrupt::free(|_| unsafe {
+        let mut cursor = None;
+
+        while let Some(thread) = traverse_wait_queue(cursor) {
+            if snapshot_len == snapshot.len() {
+                truncated = true;
+                break;
+            }
+
+            let thread_ref = &*thread;
+            let (wait_ticks, waitevt) = thread_ref.wait_info();
+            snapshot[snapshot_len] = WaitThreadSnapshot {
+                id: thread_ref.id,
+                name: thread_ref.name,
+                state: thread_ref.state,
+                wait_ticks,
+                waitevt,
+            };
+            snapshot_len += 1;
+            cursor = Some(thread);
+        }
+    });
+
+    shell_write_str("wait queue:\r\n");
+    for thread in &snapshot[..snapshot_len] {
+        shell_write_str("  id=");
+        shell_write_u32(thread.id);
+        shell_write_str(" name=");
+        shell_write_str(thread.name);
+        shell_write_str(" state=");
+        shell_write_str(thread_state_name(thread.state));
+        shell_write_str(" wait_ticks=");
+        shell_write_u32(thread.wait_ticks);
+        shell_write_str(" waitevt=");
+        shell_write_u32(thread.waitevt);
+        shell_write_str("\r\n");
+    }
+
+    if truncated {
+        shell_write_str("  ... truncated ...\r\n");
+    }
 }
 
 fn dump_ktimer_queue() {
@@ -247,6 +297,27 @@ impl Default for ThreadSnapshot {
             state: rtsched::ThreadState::Waiting,
             sched_tick_cnt: 0,
             vruntime: 0,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct WaitThreadSnapshot {
+    id: u32,
+    name: &'static str,
+    state: rtsched::ThreadState,
+    wait_ticks: u32,
+    waitevt: u32,
+}
+
+impl Default for WaitThreadSnapshot {
+    fn default() -> Self {
+        Self {
+            id: 0,
+            name: "",
+            state: rtsched::ThreadState::Waiting,
+            wait_ticks: 0,
+            waitevt: 0,
         }
     }
 }
