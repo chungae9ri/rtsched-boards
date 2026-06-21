@@ -93,6 +93,9 @@ extern "C" fn do_nothing_task(_arg: *mut c_void) -> ! {
         for i in 0..10 {
             board_print_thread_iteration("do_nothing_task", i + 1);
             rtsched::msleepyi(5);
+            for _ in 0..1000 {
+                cortex_m::asm::nop();
+            }
         }
     }
 }
@@ -243,7 +246,7 @@ pub fn set_systick(syst: &mut SYST) {
 
 #[exception]
 fn SysTick() {
-    rtsched::handle_systick();
+    rtsched::handle_sched_tick();
 }
 
 fn board_print_thread_iteration(name: &str, iteration: u32) {
