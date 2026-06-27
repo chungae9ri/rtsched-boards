@@ -92,10 +92,7 @@ extern "C" fn do_nothing_task(_arg: *mut c_void) -> ! {
     loop {
         for i in 0..10 {
             board_print_thread_iteration("do_nothing_task", i + 1);
-            rtsched::msleepyi(5);
-            for _ in 0..1000 {
-                cortex_m::asm::nop();
-            }
+            rtsched::msleepyi(1000);
         }
     }
 }
@@ -220,17 +217,15 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     set_systick(&mut hal.SYST);
 
     loop {
-        if ctimer::take_tick() {
-            if red_high {
-                red.set_low().ok();
-                board_printf::board_printf("set red low\r\n");
-            } else {
-                red.set_high().ok();
-                board_printf::board_printf("set red high\r\n");
-            }
-            red_high = !red_high;
+        if red_high {
+            red.set_low().ok();
+            board_printf::board_printf("set red low\r\n");
+        } else {
+            red.set_high().ok();
+            board_printf::board_printf("set red high\r\n");
         }
-        rtsched::msleepyi(5);
+        red_high = !red_high;
+        rtsched::msleepyi(1000);
     }
 }
 

@@ -3,7 +3,7 @@ use core::sync::atomic::Ordering;
 
 use cortex_m::interrupt;
 use rtsched::{traverse_ktimer_queue_fn, traverse_run_queue, traverse_wait_queue};
-use rtt_target::rprintln;
+use rtt_target::{rprint, rprintln};
 
 use crate::board_printf;
 use crate::drivers::uart;
@@ -20,10 +20,13 @@ pub extern "C" fn shell_task(_arg: *mut c_void) -> ! {
     }
 
     shell_write_str("shell> ");
+    rprint!("shell rx> ");
 
     loop {
         match uart::try_read() {
             Ok(Some(byte)) => {
+                debug_echo_shell_byte(byte);
+
                 match byte {
                     b'\r' | b'\n' => {
                         shell_write_byte(b'\r');
@@ -51,14 +54,24 @@ pub extern "C" fn shell_task(_arg: *mut c_void) -> ! {
                     }
                     _ => {}
                 }
-
-                rprintln!("uart rx: 0x{:02x} '{}'", byte, ascii_debug(byte));
             }
             Ok(None) => {}
             Err(err) => {
                 rprintln!("uart rx error: {:?}", err);
             }
         }
+    }
+}
+
+fn debug_echo_shell_byte(byte: u8) {
+    match byte {
+        b'\r' | b'\n' => {
+            rprintln!();
+            rprint!("shell rx> ");
+        }
+        0x08 | 0x7f => rprint!("\x08 \x08"),
+        _ if byte.is_ascii_graphic() || byte == b' ' => rprint!("{}", byte as char),
+        _ => {}
     }
 }
 
@@ -260,14 +273,6 @@ fn shell_write_u64(mut value: u64) {
     }
 
     shell_write_bytes(&buf[idx..]);
-}
-
-fn ascii_debug(byte: u8) -> char {
-    if byte.is_ascii_graphic() || byte == b' ' {
-        byte as char
-    } else {
-        '.'
-    }
 }
 
 fn thread_state_name(state: rtsched::ThreadState) -> &'static str {

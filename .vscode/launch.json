@@ -42,6 +42,39 @@
     },
     {
       "type": "probe-rs-debug",
+      "request": "launch",
+      "name": "probe_rs Release (flash and run)",
+      "cwd": "${workspaceFolder}",
+      "speed": 100,
+      "probe": "1366:0105:000720762184",
+      "runtimeExecutable": "probe-rs",
+      "runtimeArgs": ["dap-server"],
+      "chip": "LPC55S69JBD100",
+      "flashingConfig": {
+        "flashingEnabled": true,
+        "haltAfterReset": false,
+        "formatOptions": {
+          "binaryFormat": "elf"
+        }
+      },
+      "coreConfigs": [
+        {
+          "coreIndex": 0,
+          "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/release/lpc55s69",
+          "rttEnabled": true,
+          "rttChannelFormats": [
+            {
+              "channelNumber": 0,
+              "dataFormat": "String",
+              "showTimestamps": false
+            }
+          ]
+        }
+      ],
+      "consoleLogLevel": "Console"
+    },
+    {
+      "type": "probe-rs-debug",
       "request": "attach",
       "name": "probe_rs Attach (no flash)",
       "cwd": "${workspaceFolder}",
