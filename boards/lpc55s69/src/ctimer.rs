@@ -22,10 +22,6 @@ pub fn configure(
     unsafe { NVIC::unmask(hal::raw::Interrupt::CTIMER0) };
 }
 
-pub fn take_tick() -> bool {
-    TICK.swap(false, Ordering::AcqRel)
-}
-
 #[interrupt]
 fn CTIMER0() {
     let p = unsafe { hal::raw::Peripherals::steal() };

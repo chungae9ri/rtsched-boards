@@ -217,17 +217,15 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     set_systick(&mut hal.SYST);
 
     loop {
-        if ctimer::take_tick() {
-            if red_high {
-                red.set_low().ok();
-                board_printf::board_printf("set red low\r\n");
-            } else {
-                red.set_high().ok();
-                board_printf::board_printf("set red high\r\n");
-            }
-            red_high = !red_high;
+        if red_high {
+            red.set_low().ok();
+            board_printf::board_printf("set red low\r\n");
+        } else {
+            red.set_high().ok();
+            board_printf::board_printf("set red high\r\n");
         }
-        rtsched::msleepyi(5);
+        red_high = !red_high;
+        rtsched::msleepyi(1000);
     }
 }
 
