@@ -79,7 +79,7 @@ extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
         rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
             board_print_thread_iteration("rt_thread2", i + 1);
-            rtsched::msleepyi(6);
+            rtsched::msleepyi(10);
             for _ in 0..1000 {
                 cortex_m::asm::nop();
             }
@@ -141,7 +141,7 @@ fn main() -> ! {
             8,
         );
 
-        let rt_thread1 = rtsched::forkyi(
+        rtsched::forkyi(
             core::ptr::addr_of_mut!(RT_THREAD1).cast::<rtsched::RtThread>(),
             core::ptr::addr_of_mut!(RT_THREAD1_STACK)
                 .cast::<rtsched::AlignedStack<STACK_LEN>>()
@@ -150,12 +150,10 @@ fn main() -> ! {
             rt_thread1_runner,
             core::ptr::null_mut(),
             "rt_thread1",
-            0, // Not used for RT thread
+            core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY),
         );
-        (*core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY)).init_thread_ctx(rt_thread1);
-        rtsched::enqueue_ktimer((*core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY)).entity_mut());
 
-        let rt_thread2 = rtsched::forkyi(
+        rtsched::forkyi(
             core::ptr::addr_of_mut!(RT_THREAD2).cast::<rtsched::RtThread>(),
             core::ptr::addr_of_mut!(RT_THREAD2_STACK)
                 .cast::<rtsched::AlignedStack<STACK_LEN>>()
@@ -164,10 +162,8 @@ fn main() -> ! {
             rt_thread2_runner,
             core::ptr::null_mut(),
             "rt_thread2",
-            0, // Not used for RT thread
+            core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY),
         );
-        (*core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY)).init_thread_ctx(rt_thread2);
-        rtsched::enqueue_ktimer((*core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY)).entity_mut());
 
         rtsched::spawn_main_thread(main_thread)
     }
