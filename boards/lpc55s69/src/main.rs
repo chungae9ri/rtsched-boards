@@ -23,6 +23,10 @@ const STACK_LEN: usize = 1024;
 const UART_BAUD: u32 = 115_200;
 const CFS_EXEC_MS: u32 = 10;
 const CFS_PERIOD_MS: u32 = 30;
+type RedLed = hal::drivers::pins::Pin<
+    hal::drivers::pins::Pio1_6,
+    hal::typestates::pin::state::Gpio<hal::drivers::pins::direction::Output>,
+>;
 pub(crate) static UART_READY: AtomicBool = AtomicBool::new(false);
 
 /// Main thread context and dedicated stack.
@@ -35,9 +39,10 @@ static mut MAIN_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
 
 static mut SHELL_STACK: rtsched::AlignedStack<STACK_LEN> = rtsched::AlignedStack([0; STACK_LEN]);
 static mut SHELL_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
-static mut DO_NOTHING_STACK: rtsched::AlignedStack<STACK_LEN> =
+static mut LED_BLINK_STACK: rtsched::AlignedStack<STACK_LEN> =
     rtsched::AlignedStack([0; STACK_LEN]);
-static mut DO_NOTHING_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
+static mut LED_BLINK_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
+static mut RED_LED: MaybeUninit<RedLed> = MaybeUninit::uninit();
 
 const BOARD_SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 const TICKS_PER_MS: u32 = BOARD_SYS_CLK_FREQ / 1000;
@@ -88,12 +93,20 @@ extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
     }
 }
 
-extern "C" fn do_nothing_task(_arg: *mut c_void) -> ! {
+extern "C" fn led_blink_task(_arg: *mut c_void) -> ! {
+    let red = unsafe { &mut *core::ptr::addr_of_mut!(RED_LED).cast::<RedLed>() };
+    let mut red_high = true;
+
     loop {
-        for i in 0..10 {
-            board_print_thread_iteration("do_nothing_task", i + 1);
-            rtsched::msleepyi(1000);
+        if red_high {
+            red.set_low().ok();
+            board_printf::board_printf("set red low\r\n");
+        } else {
+            red.set_high().ok();
+            board_printf::board_printf("set red high\r\n");
         }
+        red_high = !red_high;
+        rtsched::msleepyi(1000);
     }
 }
 
@@ -116,7 +129,7 @@ fn main() -> ! {
             runtime_main,
             core::ptr::null_mut(),
             "idle",
-            4,
+            16, // cpu idle thread has the lowest priority
         );
         rtsched::forkyi(
             core::ptr::addr_of_mut!(SHELL_THREAD).cast::<rtsched::CfsThread>(),
@@ -130,15 +143,15 @@ fn main() -> ! {
             1,
         );
         rtsched::forkyi(
-            core::ptr::addr_of_mut!(DO_NOTHING_THREAD).cast::<rtsched::CfsThread>(),
-            core::ptr::addr_of_mut!(DO_NOTHING_STACK)
+            core::ptr::addr_of_mut!(LED_BLINK_THREAD).cast::<rtsched::CfsThread>(),
+            core::ptr::addr_of_mut!(LED_BLINK_STACK)
                 .cast::<rtsched::AlignedStack<STACK_LEN>>()
                 .cast::<u32>()
                 .add(STACK_LEN),
-            do_nothing_task,
+            led_blink_task,
             core::ptr::null_mut(),
-            "do_nothing_1",
-            8,
+            "led_blink",
+            4,
         );
 
         rtsched::forkyi(
@@ -185,11 +198,13 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     let pins = hal::Pins::take().unwrap();
     let flexcomm_token = clocks.support_flexcomm_token().unwrap();
 
-    let mut red = pins
+    let red = pins
         .pio1_6
         .into_gpio_pin(&mut iocon, &mut gpio)
         .into_output(Level::High);
-    let mut red_high = true;
+    unsafe {
+        core::ptr::addr_of_mut!(RED_LED).write(MaybeUninit::new(red));
+    }
 
     let usart = hal
         .flexcomm
@@ -213,15 +228,10 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     set_systick(&mut hal.SYST);
 
     loop {
-        if red_high {
-            red.set_low().ok();
-            board_printf::board_printf("set red low\r\n");
-        } else {
-            red.set_high().ok();
-            board_printf::board_printf("set red high\r\n");
+        board_printf::board_printf("entering cpu idle...\r\n");
+        for _ in 0..1000000 {
+            cortex_m::asm::nop();
         }
-        red_high = !red_high;
-        rtsched::msleepyi(1000);
     }
 }
 
