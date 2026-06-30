@@ -229,9 +229,7 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
 
     loop {
         board_printf::board_printf("entering cpu idle...\r\n");
-        for _ in 0..1000000 {
-            cortex_m::asm::nop();
-        }
+        cortex_m::asm::wfi();
     }
 }
 
