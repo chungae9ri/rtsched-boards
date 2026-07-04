@@ -185,18 +185,27 @@ fn main() -> ! {
 extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     let mut hal = hal::new();
 
-    let clocks = hal::ClockRequirements::default()
+    let clocks = match hal::ClockRequirements::default()
         .system_frequency(12.MHz())
         .configure(&mut hal.anactrl, &mut hal.pmc, &mut hal.syscon)
-        .unwrap();
+    {
+        Ok(clocks) => clocks,
+        Err(_) => fatal("failed to configure clocks\r\n"),
+    };
     if !rtsched::init_dwt_cycle_counter(&mut hal.DCB, &mut hal.DWT) {
         board_printf::board_printf("failed to initialize DWT cycle counter\r\n");
     }
 
     let mut gpio = hal.gpio.enabled(&mut hal.syscon);
     let mut iocon = hal.iocon.enabled(&mut hal.syscon);
-    let pins = hal::Pins::take().unwrap();
-    let flexcomm_token = clocks.support_flexcomm_token().unwrap();
+    let pins = match hal::Pins::take() {
+        Some(pins) => pins,
+        None => fatal("failed to take board pins\r\n"),
+    };
+    let flexcomm_token = match clocks.support_flexcomm_token() {
+        Some(token) => token,
+        None => fatal("missing flexcomm clock token\r\n"),
+    };
 
     let red = pins
         .pio1_6
@@ -223,7 +232,10 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     ctimer::configure(
         hal.ctimer.0,
         &mut hal.syscon,
-        clocks.support_1mhz_fro_token().unwrap(),
+        match clocks.support_1mhz_fro_token() {
+            Some(token) => token,
+            None => fatal("missing 1mhz fro clock token\r\n"),
+        },
     );
     set_systick(&mut hal.SYST);
 
@@ -234,13 +246,23 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
 }
 
 pub fn set_systick(syst: &mut SYST) {
-    let reload = rtsched::next_ktimer_reload().unwrap();
+    let reload = match rtsched::next_ktimer_reload() {
+        Some(reload) => reload,
+        None => fatal("missing next ktimer reload\r\n"),
+    };
 
     syst.set_clock_source(SystClkSource::Core);
     syst.set_reload(reload);
     syst.clear_current();
     syst.enable_interrupt();
     syst.enable_counter();
+}
+
+fn fatal(message: &str) -> ! {
+    board_printf::board_printf(message);
+    loop {
+        cortex_m::asm::wfi();
+    }
 }
 
 #[exception]

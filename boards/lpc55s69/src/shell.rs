@@ -1,8 +1,7 @@
 use core::ffi::c_void;
 use core::sync::atomic::Ordering;
 
-use cortex_m::interrupt;
-use rtsched::{traverse_ktimer_queue_fn, traverse_run_queue, traverse_wait_queue};
+use rtsched::{traverse_ktimer_queue_fn, traverse_run_queue_fn, traverse_wait_queue_fn};
 use rtt_target::{rprint, rprintln};
 
 use crate::board_printf;
@@ -111,27 +110,20 @@ fn dump_run_queue() {
     let mut snapshot_len = 0usize;
     let mut truncated = false;
 
-    interrupt::free(|_| unsafe {
-        let mut cursor = None;
-
-        while let Some(thread) = traverse_run_queue(cursor) {
-            if snapshot_len == snapshot.len() {
-                truncated = true;
-                break;
-            }
-
-            let thread_ref = &*thread;
-            let sched_entity = thread_ref.sched_entity();
+    traverse_run_queue_fn(|thread| {
+        if snapshot_len == snapshot.len() {
+            truncated = true;
+        } else {
+            let sched_entity = thread.sched_entity();
             snapshot[snapshot_len] = ThreadSnapshot {
-                id: thread_ref.id,
-                name: thread_ref.name,
+                id: thread.id,
+                name: thread.name,
                 priority: sched_entity.map_or(0, |entity| entity.priority),
-                state: thread_ref.state,
+                state: thread.state,
                 sched_tick_cnt: sched_entity.map_or(0, |entity| entity.sched_tick_cnt()),
                 vruntime: sched_entity.map_or(0, |entity| entity.vruntime()),
             };
             snapshot_len += 1;
-            cursor = Some(thread);
         }
     });
 
@@ -164,26 +156,19 @@ fn dump_wait_queue() {
     let mut snapshot_len = 0usize;
     let mut truncated = false;
 
-    interrupt::free(|_| unsafe {
-        let mut cursor = None;
-
-        while let Some(thread) = traverse_wait_queue(cursor) {
-            if snapshot_len == snapshot.len() {
-                truncated = true;
-                break;
-            }
-
-            let thread_ref = &*thread;
-            let (wait_ticks, waitevt) = thread_ref.wait_info();
+    traverse_wait_queue_fn(|thread| {
+        if snapshot_len == snapshot.len() {
+            truncated = true;
+        } else {
+            let (wait_ticks, waitevt) = thread.wait_info();
             snapshot[snapshot_len] = WaitThreadSnapshot {
-                id: thread_ref.id,
-                name: thread_ref.name,
-                state: thread_ref.state,
+                id: thread.id,
+                name: thread.name,
+                state: thread.state,
                 wait_ticks,
                 waitevt,
             };
             snapshot_len += 1;
-            cursor = Some(thread);
         }
     });
 
