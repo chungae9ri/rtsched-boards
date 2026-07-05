@@ -120,64 +120,40 @@ fn main() -> ! {
         rtsched::init_ktimer_queue();
         rtsched::init_cfs(CFS_PERIOD_TICKS, CFS_EXEC_TICKS);
 
-        let main_thread = rtsched::forkyi(
-            core::ptr::addr_of_mut!(MAIN_THREAD).cast::<rtsched::CfsThread>(),
-            core::ptr::addr_of_mut!(MAIN_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            runtime_main,
-            core::ptr::null_mut(),
-            "idle",
-            16, // cpu idle thread has the lowest priority
+        let main_thread = rtsched::CfsThreadBuilder::new("cpu_idle", runtime_main, 16).spawn(
+            core::ptr::addr_of_mut!(MAIN_THREAD),
+            core::ptr::addr_of_mut!(MAIN_STACK),
         );
-        rtsched::forkyi(
-            core::ptr::addr_of_mut!(SHELL_THREAD).cast::<rtsched::CfsThread>(),
-            core::ptr::addr_of_mut!(SHELL_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            shell::shell_task,
-            core::ptr::null_mut(),
-            "shell",
-            1,
+        rtsched::CfsThreadBuilder::new("shell", shell::shell_task, 1).spawn(
+            core::ptr::addr_of_mut!(SHELL_THREAD),
+            core::ptr::addr_of_mut!(SHELL_STACK),
         );
-        rtsched::forkyi(
-            core::ptr::addr_of_mut!(LED_BLINK_THREAD).cast::<rtsched::CfsThread>(),
-            core::ptr::addr_of_mut!(LED_BLINK_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            led_blink_task,
-            core::ptr::null_mut(),
-            "led_blink",
-            4,
+        rtsched::CfsThreadBuilder::new("led_blink", led_blink_task, 4).spawn(
+            core::ptr::addr_of_mut!(LED_BLINK_THREAD),
+            core::ptr::addr_of_mut!(LED_BLINK_STACK),
         );
 
-        rtsched::forkyi(
-            core::ptr::addr_of_mut!(RT_THREAD1).cast::<rtsched::RtThread>(),
-            core::ptr::addr_of_mut!(RT_THREAD1_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            rt_thread1_runner,
-            core::ptr::null_mut(),
+        rtsched::RtThreadBuilder::new(
             "rt_thread1",
+            rt_thread1_runner,
             core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY),
+        )
+        .spawn(
+            core::ptr::addr_of_mut!(RT_THREAD1),
+            core::ptr::addr_of_mut!(RT_THREAD1_STACK),
         );
 
-        rtsched::forkyi(
-            core::ptr::addr_of_mut!(RT_THREAD2).cast::<rtsched::RtThread>(),
-            core::ptr::addr_of_mut!(RT_THREAD2_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            rt_thread2_runner,
-            core::ptr::null_mut(),
+        rtsched::RtThreadBuilder::new(
             "rt_thread2",
+            rt_thread2_runner,
             core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY),
+        )
+        .spawn(
+            core::ptr::addr_of_mut!(RT_THREAD2),
+            core::ptr::addr_of_mut!(RT_THREAD2_STACK),
         );
 
+        rtsched::register_idle_thread(main_thread);
         rtsched::spawn_main_thread(main_thread)
     }
 }
@@ -185,18 +161,27 @@ fn main() -> ! {
 extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     let mut hal = hal::new();
 
-    let clocks = hal::ClockRequirements::default()
+    let clocks = match hal::ClockRequirements::default()
         .system_frequency(12.MHz())
         .configure(&mut hal.anactrl, &mut hal.pmc, &mut hal.syscon)
-        .unwrap();
+    {
+        Ok(clocks) => clocks,
+        Err(_) => fatal("failed to configure clocks\r\n"),
+    };
     if !rtsched::init_dwt_cycle_counter(&mut hal.DCB, &mut hal.DWT) {
         board_printf::board_printf("failed to initialize DWT cycle counter\r\n");
     }
 
     let mut gpio = hal.gpio.enabled(&mut hal.syscon);
     let mut iocon = hal.iocon.enabled(&mut hal.syscon);
-    let pins = hal::Pins::take().unwrap();
-    let flexcomm_token = clocks.support_flexcomm_token().unwrap();
+    let pins = match hal::Pins::take() {
+        Some(pins) => pins,
+        None => fatal("failed to take board pins\r\n"),
+    };
+    let flexcomm_token = match clocks.support_flexcomm_token() {
+        Some(token) => token,
+        None => fatal("missing flexcomm clock token\r\n"),
+    };
 
     let red = pins
         .pio1_6
@@ -223,7 +208,10 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     ctimer::configure(
         hal.ctimer.0,
         &mut hal.syscon,
-        clocks.support_1mhz_fro_token().unwrap(),
+        match clocks.support_1mhz_fro_token() {
+            Some(token) => token,
+            None => fatal("missing 1mhz fro clock token\r\n"),
+        },
     );
     set_systick(&mut hal.SYST);
 
@@ -234,13 +222,23 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
 }
 
 pub fn set_systick(syst: &mut SYST) {
-    let reload = rtsched::next_ktimer_reload().unwrap();
+    let reload = match rtsched::next_ktimer_reload() {
+        Some(reload) => reload,
+        None => fatal("missing next ktimer reload\r\n"),
+    };
 
     syst.set_clock_source(SystClkSource::Core);
     syst.set_reload(reload);
     syst.clear_current();
     syst.enable_interrupt();
     syst.enable_counter();
+}
+
+fn fatal(message: &str) -> ! {
+    board_printf::board_printf(message);
+    loop {
+        cortex_m::asm::wfi();
+    }
 }
 
 #[exception]
