@@ -120,62 +120,37 @@ fn main() -> ! {
         rtsched::init_ktimer_queue();
         rtsched::init_cfs(CFS_PERIOD_TICKS, CFS_EXEC_TICKS);
 
-        let main_thread = rtsched::forkyi(
-            core::ptr::addr_of_mut!(MAIN_THREAD).cast::<rtsched::CfsThread>(),
-            core::ptr::addr_of_mut!(MAIN_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            runtime_main,
-            core::ptr::null_mut(),
-            "idle",
-            16, // cpu idle thread has the lowest priority
+        let main_thread = rtsched::CfsThreadBuilder::new("idle", runtime_main, 16).spawn(
+            core::ptr::addr_of_mut!(MAIN_THREAD),
+            core::ptr::addr_of_mut!(MAIN_STACK),
         );
-        rtsched::forkyi(
-            core::ptr::addr_of_mut!(SHELL_THREAD).cast::<rtsched::CfsThread>(),
-            core::ptr::addr_of_mut!(SHELL_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            shell::shell_task,
-            core::ptr::null_mut(),
-            "shell",
-            1,
+        rtsched::CfsThreadBuilder::new("shell", shell::shell_task, 1).spawn(
+            core::ptr::addr_of_mut!(SHELL_THREAD),
+            core::ptr::addr_of_mut!(SHELL_STACK),
         );
-        rtsched::forkyi(
-            core::ptr::addr_of_mut!(LED_BLINK_THREAD).cast::<rtsched::CfsThread>(),
-            core::ptr::addr_of_mut!(LED_BLINK_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            led_blink_task,
-            core::ptr::null_mut(),
-            "led_blink",
-            4,
+        rtsched::CfsThreadBuilder::new("led_blink", led_blink_task, 4).spawn(
+            core::ptr::addr_of_mut!(LED_BLINK_THREAD),
+            core::ptr::addr_of_mut!(LED_BLINK_STACK),
         );
 
-        rtsched::forkyi(
-            core::ptr::addr_of_mut!(RT_THREAD1).cast::<rtsched::RtThread>(),
-            core::ptr::addr_of_mut!(RT_THREAD1_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            rt_thread1_runner,
-            core::ptr::null_mut(),
+        rtsched::RtThreadBuilder::new(
             "rt_thread1",
+            rt_thread1_runner,
             core::ptr::addr_of_mut!(RT_THREAD1_TIMER_ENTITY),
+        )
+        .spawn(
+            core::ptr::addr_of_mut!(RT_THREAD1),
+            core::ptr::addr_of_mut!(RT_THREAD1_STACK),
         );
 
-        rtsched::forkyi(
-            core::ptr::addr_of_mut!(RT_THREAD2).cast::<rtsched::RtThread>(),
-            core::ptr::addr_of_mut!(RT_THREAD2_STACK)
-                .cast::<rtsched::AlignedStack<STACK_LEN>>()
-                .cast::<u32>()
-                .add(STACK_LEN),
-            rt_thread2_runner,
-            core::ptr::null_mut(),
+        rtsched::RtThreadBuilder::new(
             "rt_thread2",
+            rt_thread2_runner,
             core::ptr::addr_of_mut!(RT_THREAD2_TIMER_ENTITY),
+        )
+        .spawn(
+            core::ptr::addr_of_mut!(RT_THREAD2),
+            core::ptr::addr_of_mut!(RT_THREAD2_STACK),
         );
 
         rtsched::spawn_main_thread(main_thread)
