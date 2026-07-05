@@ -1,7 +1,10 @@
 use core::ffi::c_void;
 use core::sync::atomic::Ordering;
 
-use rtsched::{traverse_ktimer_queue_fn, traverse_run_queue_fn, traverse_wait_queue_fn};
+use rtsched::{
+    traverse_idle_thread_fn, traverse_ktimer_queue_fn, traverse_run_queue_fn,
+    traverse_wait_queue_fn,
+};
 use rtt_target::{rprint, rprintln};
 
 use crate::board_printf;
@@ -110,38 +113,20 @@ fn dump_run_queue() {
     let mut snapshot_len = 0usize;
     let mut truncated = false;
 
+    dump_idle_thread();
+
     traverse_run_queue_fn(|thread| {
         if snapshot_len == snapshot.len() {
             truncated = true;
         } else {
-            let sched_entity = thread.sched_entity();
-            snapshot[snapshot_len] = ThreadSnapshot {
-                id: thread.id,
-                name: thread.name,
-                priority: sched_entity.map_or(0, |entity| entity.priority),
-                state: thread.state,
-                sched_tick_cnt: sched_entity.map_or(0, |entity| entity.sched_tick_cnt()),
-                vruntime: sched_entity.map_or(0, |entity| entity.vruntime()),
-            };
+            snapshot[snapshot_len] = thread_snapshot(thread);
             snapshot_len += 1;
         }
     });
 
     shell_write_str("run queue:\r\n");
     for thread in &snapshot[..snapshot_len] {
-        shell_write_str("  id=");
-        shell_write_u32(thread.id);
-        shell_write_str(" name=");
-        shell_write_str(thread.name);
-        shell_write_str(" prio=");
-        shell_write_u32(thread.priority);
-        shell_write_str(" state=");
-        shell_write_str(thread_state_name(thread.state));
-        shell_write_str(" ticks=");
-        shell_write_u64(thread.sched_tick_cnt);
-        shell_write_str(" vruntime=");
-        shell_write_u64(thread.vruntime);
-        shell_write_str("\r\n");
+        dump_thread_snapshot(thread);
     }
 
     if truncated {
@@ -149,6 +134,51 @@ fn dump_run_queue() {
     }
 
     dump_wait_queue();
+}
+
+fn dump_idle_thread() {
+    let mut snapshot = ThreadSnapshot::default();
+    let mut registered = false;
+
+    traverse_idle_thread_fn(|thread| {
+        snapshot = thread_snapshot(thread);
+        registered = true;
+    });
+
+    shell_write_str("idle thread:\r\n");
+    if registered {
+        dump_thread_snapshot(&snapshot);
+    } else {
+        shell_write_str("  <none>\r\n");
+    }
+}
+
+fn thread_snapshot(thread: &rtsched::ThreadCtx) -> ThreadSnapshot {
+    let sched_info = thread.sched_info();
+    ThreadSnapshot {
+        id: thread.id,
+        name: thread.name,
+        priority: sched_info.map_or(0, |info| info.priority),
+        state: thread.state,
+        sched_tick_cnt: sched_info.map_or(0, |info| info.sched_tick_cnt),
+        vruntime: sched_info.map_or(0, |info| info.vruntime),
+    }
+}
+
+fn dump_thread_snapshot(thread: &ThreadSnapshot) {
+    shell_write_str("  id=");
+    shell_write_u32(thread.id);
+    shell_write_str(" name=");
+    shell_write_str(thread.name);
+    shell_write_str(" prio=");
+    shell_write_u32(thread.priority);
+    shell_write_str(" state=");
+    shell_write_str(thread_state_name(thread.state));
+    shell_write_str(" ticks=");
+    shell_write_u64(thread.sched_tick_cnt);
+    shell_write_str(" vruntime=");
+    shell_write_u64(thread.vruntime);
+    shell_write_str("\r\n");
 }
 
 fn dump_wait_queue() {

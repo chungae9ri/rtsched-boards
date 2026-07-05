@@ -120,7 +120,7 @@ fn main() -> ! {
         rtsched::init_ktimer_queue();
         rtsched::init_cfs(CFS_PERIOD_TICKS, CFS_EXEC_TICKS);
 
-        let main_thread = rtsched::CfsThreadBuilder::new("idle", runtime_main, 16).spawn(
+        let main_thread = rtsched::CfsThreadBuilder::new("cpu_idle", runtime_main, 16).spawn(
             core::ptr::addr_of_mut!(MAIN_THREAD),
             core::ptr::addr_of_mut!(MAIN_STACK),
         );
@@ -153,6 +153,7 @@ fn main() -> ! {
             core::ptr::addr_of_mut!(RT_THREAD2_STACK),
         );
 
+        rtsched::register_idle_thread(main_thread);
         rtsched::spawn_main_thread(main_thread)
     }
 }
