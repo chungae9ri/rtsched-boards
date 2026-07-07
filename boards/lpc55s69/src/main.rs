@@ -65,6 +65,14 @@ const RT_THREAD2_PERIOD_TICKS: u32 = RT_THREAD2_PERIOD_MS * TICKS_PER_MS;
 static mut RT_THREAD2_TIMER_ENTITY: rtsched::RtKTimer =
     rtsched::RtKTimer::new(RT_THREAD2_PERIOD_TICKS, core::ptr::null_mut(), "rt_thread2");
 
+static mut RT_THREAD3_STACK: rtsched::AlignedStack<STACK_LEN> =
+    rtsched::AlignedStack([0; STACK_LEN]);
+static mut RT_THREAD3: MaybeUninit<rtsched::RtThread> = MaybeUninit::uninit();
+const RT_THREAD3_PERIOD_MS: u32 = 120;
+const RT_THREAD3_PERIOD_TICKS: u32 = RT_THREAD3_PERIOD_MS * TICKS_PER_MS;
+static mut RT_THREAD3_TIMER_ENTITY: rtsched::RtKTimer =
+    rtsched::RtKTimer::new(RT_THREAD3_PERIOD_TICKS, core::ptr::null_mut(), "rt_thread3");
+
 extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
         rtsched::set_rt_thread_start_time(0);
@@ -86,6 +94,20 @@ extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
             board_print_thread_iteration("rt_thread2", i + 1);
             rtsched::msleepyi(10);
             for _ in 0..1000 {
+                cortex_m::asm::nop();
+            }
+        }
+        rtsched::yieldyi();
+    }
+}
+
+extern "C" fn rt_thread3_runner(_arg: *mut c_void) -> ! {
+    loop {
+        rtsched::set_rt_thread_start_time(0);
+        for i in 0..5 {
+            board_print_thread_iteration("rt_thread3", i + 1);
+            rtsched::msleepyi(20);
+            for _ in 0..100 {
                 cortex_m::asm::nop();
             }
         }
@@ -151,6 +173,16 @@ fn main() -> ! {
         .spawn(
             core::ptr::addr_of_mut!(RT_THREAD2),
             core::ptr::addr_of_mut!(RT_THREAD2_STACK),
+        );
+
+        rtsched::RtThreadBuilder::new(
+            "rt_thread3",
+            rt_thread3_runner,
+            core::ptr::addr_of_mut!(RT_THREAD3_TIMER_ENTITY),
+        )
+        .spawn(
+            core::ptr::addr_of_mut!(RT_THREAD3),
+            core::ptr::addr_of_mut!(RT_THREAD3_STACK),
         );
 
         rtsched::register_idle_thread(main_thread);
