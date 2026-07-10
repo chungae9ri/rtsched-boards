@@ -1,3 +1,6 @@
-# slos-m
-Simple and Light OS integrated with Rust rtsc (Runtime Scheduler).
-This OS is demonstrated in LPC55S69 evaluation board
+# Board verification for rtsched
+To test rtsched, follow below steps
+1. git clone github.com/chungae9ri/rtsched-boards
+2. cd rtsched-boards
+3. git submodule update --init --recursive
+4. cargo build
