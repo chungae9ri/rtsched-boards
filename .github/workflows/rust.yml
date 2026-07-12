@@ -35,3 +35,5 @@ jobs:
       run: rustup target add thumbv8m.main-none-eabihf
     - name: Run embedded check
       run: cargo check --target thumbv8m.main-none-eabihf
+    - name: Check rtsched examples
+      run: cargo check -p rtsched --examples --features embedded-examples --target thumbv8m.main-none-eabihf
