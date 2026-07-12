@@ -29,10 +29,10 @@ type RedLed = hal::drivers::pins::Pin<
 >;
 pub(crate) static UART_READY: AtomicBool = AtomicBool::new(false);
 
-/// Main thread context and dedicated stack.
+/// Idle thread context and dedicated stack.
 ///
 /// The reset handler enters `main` using MSP. We synthesize an initial thread
-/// frame for the real application thread and start it through the same restore
+/// frame for the CPU idle thread and start it through the same restore
 /// path used by every other thread.
 static mut MAIN_STACK: rtsched::AlignedStack<STACK_LEN> = rtsched::AlignedStack([0; STACK_LEN]);
 static mut MAIN_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
@@ -185,12 +185,15 @@ fn main() -> ! {
             core::ptr::addr_of_mut!(RT_THREAD3_STACK),
         );
 
+        let mut syst = init_board_hardware();
+
         rtsched::register_idle_thread(main_thread);
+        set_systick(&mut syst);
         rtsched::spawn_main_thread(main_thread)
     }
 }
 
-extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
+fn init_board_hardware() -> SYST {
     let mut hal = hal::new();
 
     let clocks = match hal::ClockRequirements::default()
@@ -245,9 +248,16 @@ extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
             None => fatal("missing 1mhz fro clock token\r\n"),
         },
     );
-    set_systick(&mut hal.SYST);
 
+    hal.SYST
+}
+
+extern "C" fn runtime_main(_arg: *mut c_void) -> ! {
     loop {
+        // The CPU idle thread runs when no other thread is runnable.
+        // This is the board hook for low-power idle behavior. It currently
+        // uses the lightweight Cortex-M WFI instruction; platform-specific
+        // power management can be added here to reduce power consumption further.
         board_printf::board_printf("entering cpu idle...\r\n");
         cortex_m::asm::wfi();
     }
