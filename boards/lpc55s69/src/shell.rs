@@ -119,7 +119,7 @@ fn dump_run_queue() {
         if snapshot_len == snapshot.len() {
             truncated = true;
         } else {
-            snapshot[snapshot_len] = thread_snapshot(thread);
+            snapshot[snapshot_len] = cfs_thread_snapshot(thread);
             snapshot_len += 1;
         }
     });
@@ -141,7 +141,7 @@ fn dump_idle_thread() {
     let mut registered = false;
 
     traverse_idle_thread_fn(|thread| {
-        snapshot = thread_snapshot(thread);
+        snapshot = cfs_thread_snapshot(thread);
         registered = true;
     });
 
@@ -153,15 +153,16 @@ fn dump_idle_thread() {
     }
 }
 
-fn thread_snapshot(thread: &rtsched::ThreadCtx) -> ThreadSnapshot {
+fn cfs_thread_snapshot(thread: &rtsched::CfsThread) -> ThreadSnapshot {
+    let thread_ctx = thread.thread_ctx();
     let sched_info = thread.sched_info();
     ThreadSnapshot {
-        id: thread.id,
-        name: thread.name,
-        priority: sched_info.map_or(0, |info| info.priority),
-        state: thread.state,
-        sched_tick_cnt: sched_info.map_or(0, |info| info.sched_tick_cnt),
-        vruntime: sched_info.map_or(0, |info| info.vruntime),
+        id: thread_ctx.id,
+        name: thread_ctx.name,
+        priority: sched_info.priority,
+        state: thread_ctx.state,
+        sched_tick_cnt: sched_info.sched_tick_cnt,
+        vruntime: sched_info.vruntime,
     }
 }
 
@@ -190,14 +191,7 @@ fn dump_wait_queue() {
         if snapshot_len == snapshot.len() {
             truncated = true;
         } else {
-            let (wait_ticks, waitevt) = thread.wait_info();
-            snapshot[snapshot_len] = WaitThreadSnapshot {
-                id: thread.id,
-                name: thread.name,
-                state: thread.state,
-                wait_ticks,
-                waitevt,
-            };
+            snapshot[snapshot_len] = wait_thread_snapshot(thread);
             snapshot_len += 1;
         }
     });
@@ -219,6 +213,30 @@ fn dump_wait_queue() {
 
     if truncated {
         shell_write_str("  ... truncated ...\r\n");
+    }
+}
+
+fn wait_thread_snapshot(thread: rtsched::ThreadRef<'_>) -> WaitThreadSnapshot {
+    match thread {
+        rtsched::ThreadRef::Cfs(thread) => {
+            wait_thread_snapshot_from_parts(thread.thread_ctx(), thread.wait_info())
+        }
+        rtsched::ThreadRef::Rt(thread) => {
+            wait_thread_snapshot_from_parts(thread.thread_ctx(), thread.wait_info())
+        }
+    }
+}
+
+fn wait_thread_snapshot_from_parts(
+    thread: &rtsched::ThreadCtx,
+    (wait_ticks, waitevt): (u32, u32),
+) -> WaitThreadSnapshot {
+    WaitThreadSnapshot {
+        id: thread.id,
+        name: thread.name,
+        state: thread.state,
+        wait_ticks,
+        waitevt,
     }
 }
 
