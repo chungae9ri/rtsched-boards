@@ -10,7 +10,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  host-test:
+  native-tests:
+    name: Native host tests
     runs-on: ubuntu-latest
 
     steps:
@@ -20,9 +21,10 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Run host tests
-      run: cargo test --target x86_64-unknown-linux-gnu
+      run: cargo test --manifest-path rtsched/Cargo.toml --target x86_64-unknown-linux-gnu
 
-  embedded-check:
+  cortex-m-builds:
+    name: Cortex-M builds
     runs-on: ubuntu-latest
 
     steps:
@@ -33,7 +35,9 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     - name: Install embedded Rust target
       run: rustup target add thumbv8m.main-none-eabihf
-    - name: Run embedded check
-      run: cargo check --target thumbv8m.main-none-eabihf
-    - name: Check rtsched examples
-      run: cargo check -p rtsched --examples --features embedded-examples --target thumbv8m.main-none-eabihf
+    - name: Build LPC55S69 board binary
+      run: cargo build --release -p lpc55s69
+    - name: Build rtsched Cortex-M examples
+      env:
+        RUSTFLAGS: -L boards/lpc55s69
+      run: cargo build --manifest-path rtsched/Cargo.toml --examples --features embedded-examples --target thumbv8m.main-none-eabihf
