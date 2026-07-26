@@ -12,6 +12,19 @@ To test rtsched, follow these steps:
 3. `git submodule update --init --recursive`
 4. `cargo build --release -p lpc55s69`
 
+## Host Tests
+
+Run the scheduler unit tests on the native host target with:
+
+```sh
+cargo test --manifest-path rtsched/Cargo.toml --target x86_64-unknown-linux-gnu
+```
+
+The explicit `--target x86_64-unknown-linux-gnu` keeps the host-only test
+harness on the native target even when your Cargo environment or board workflow
+defaults to an embedded Cortex-M target. On a non-x86 Linux host, replace the
+target triple with the `host:` value printed by `rustc -vV`.
+
 ## Example Patterns
 
 The `rtsched/examples` directory contains small Cortex-M examples that focus on
