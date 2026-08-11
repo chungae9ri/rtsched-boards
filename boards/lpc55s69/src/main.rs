@@ -8,7 +8,7 @@ mod shell;
 
 use core::ffi::c_void;
 use core::mem::MaybeUninit;
-use core::sync::atomic::{AtomicBool, Ordering};
+use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
 use cortex_m::peripheral::{SYST, syst::SystClkSource};
 use cortex_m_rt::{entry, exception};
 use panic_halt as _;
@@ -73,15 +73,29 @@ const RT_THREAD3_PERIOD_TICKS: u32 = RT_THREAD3_PERIOD_MS * TICKS_PER_MS;
 static mut RT_THREAD3_TIMER_ENTITY: rtsched::RtKTimer =
     rtsched::RtKTimer::new(RT_THREAD3_PERIOD_TICKS, core::ptr::null_mut(), "rt_thread3");
 
+static SEMA: rtsched::CountingSemaphore = rtsched::CountingSemaphore::empty(3);
+static PRODUCED_TOKENS: AtomicU32 = AtomicU32::new(0);
+static CONSUMED_TOKEN_1: AtomicU32 = AtomicU32::new(0);
+static CONSUMED_TOKEN_2: AtomicU32 = AtomicU32::new(0);
+static TOKEN_OVERFLOWS: AtomicU32 = AtomicU32::new(0);
+static TAKE_ERRORS: AtomicU32 = AtomicU32::new(0);
+
 extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
         rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
             board_print_thread_iteration("rt_thread1", i + 1);
             rtsched::msleepyi(10);
-            for _ in 0..1000 {
-                cortex_m::asm::nop();
+            for _ in 0..3 {
+                if SEMA.give().is_ok() {
+                    PRODUCED_TOKENS.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    TOKEN_OVERFLOWS.fetch_add(1, Ordering::Relaxed);
+                }
             }
+            board_printf::board_printf("Produced ");
+            board_print_u32(PRODUCED_TOKENS.load(Ordering::Relaxed));
+            board_printf::board_printf(" tokens\r\n");
         }
         rtsched::yieldyi();
     }
@@ -93,9 +107,15 @@ extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
         for i in 0..5 {
             board_print_thread_iteration("rt_thread2", i + 1);
             rtsched::msleepyi(10);
-            for _ in 0..1000 {
-                cortex_m::asm::nop();
+            if SEMA.take().is_ok() {
+                CONSUMED_TOKEN_1.fetch_add(1, Ordering::Relaxed);
+            } else {
+                TAKE_ERRORS.fetch_add(1, Ordering::Relaxed);
             }
+
+            board_printf::board_printf("Consumed by rt_thread2:");
+            board_print_u32(CONSUMED_TOKEN_1.load(Ordering::Relaxed));
+            board_printf::board_printf(" tokens\r\n");
         }
         rtsched::yieldyi();
     }
@@ -106,10 +126,16 @@ extern "C" fn rt_thread3_runner(_arg: *mut c_void) -> ! {
         rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
             board_print_thread_iteration("rt_thread3", i + 1);
-            rtsched::msleepyi(20);
-            for _ in 0..100 {
-                cortex_m::asm::nop();
+            rtsched::msleepyi(10);
+            if SEMA.take().is_ok() {
+                CONSUMED_TOKEN_2.fetch_add(1, Ordering::Relaxed);
+            } else {
+                TAKE_ERRORS.fetch_add(1, Ordering::Relaxed);
             }
+
+            board_printf::board_printf("Consumed by rt_thread3:");
+            board_print_u32(CONSUMED_TOKEN_2.load(Ordering::Relaxed));
+            board_printf::board_printf(" tokens\r\n");
         }
         rtsched::yieldyi();
     }

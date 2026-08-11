@@ -207,7 +207,7 @@ fn dump_wait_queue() {
         shell_write_str(" wait_ticks=");
         shell_write_u32(thread.wait_ticks);
         shell_write_str(" waitevt=");
-        shell_write_u32(thread.waitevt);
+        shell_write_str(wait_event_name(thread.waitevt));
         shell_write_str("\r\n");
     }
 
@@ -229,7 +229,7 @@ fn wait_thread_snapshot(thread: rtsched::ThreadRef<'_>) -> WaitThreadSnapshot {
 
 fn wait_thread_snapshot_from_parts(
     thread: &rtsched::ThreadCtx,
-    (wait_ticks, waitevt): (u32, u32),
+    (wait_ticks, waitevt): (u32, Option<rtsched::SyncType>),
 ) -> WaitThreadSnapshot {
     WaitThreadSnapshot {
         id: thread.id,
@@ -316,6 +316,15 @@ fn thread_state_name(state: rtsched::ThreadState) -> &'static str {
     }
 }
 
+fn wait_event_name(waitevt: Option<rtsched::SyncType>) -> &'static str {
+    match waitevt {
+        Some(rtsched::SyncType::BinarySemaphore) => "binary-semaphore",
+        Some(rtsched::SyncType::CountingSemaphore) => "counting-semaphore",
+        Some(rtsched::SyncType::Mutex) => "mutex",
+        None => "none",
+    }
+}
+
 #[derive(Clone, Copy)]
 struct ThreadSnapshot {
     id: u32,
@@ -345,7 +354,7 @@ struct WaitThreadSnapshot {
     name: &'static str,
     state: rtsched::ThreadState,
     wait_ticks: u32,
-    waitevt: u32,
+    waitevt: Option<rtsched::SyncType>,
 }
 
 impl Default for WaitThreadSnapshot {
@@ -355,7 +364,7 @@ impl Default for WaitThreadSnapshot {
             name: "",
             state: rtsched::ThreadState::Waiting,
             wait_ticks: 0,
-            waitevt: 0,
+            waitevt: None,
         }
     }
 }
