@@ -4,11 +4,15 @@ use rtt_target::rprint;
 
 use crate::drivers::uart;
 
+use rtsched::Mutex;
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 pub enum Stdout {
     Uart = 0,
     Rtt = 1,
 }
+
+static STDIO_MTX: Mutex<u32> = Mutex::new(0);
 
 static STDOUT: AtomicU8 = AtomicU8::new(Stdout::Uart as u8);
 
@@ -32,6 +36,10 @@ pub fn stdout() -> Stdout {
 }
 
 pub fn board_printf(message: &str) {
+    let Ok(_guard) = STDIO_MTX.lock() else {
+        return;
+    };
+
     match stdout() {
         Stdout::Uart if uart_ready() => uart_write_str(message),
         Stdout::Uart => rprint!("{}", message),
