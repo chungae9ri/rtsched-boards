@@ -8,7 +8,7 @@ mod shell;
 
 use core::ffi::c_void;
 use core::mem::MaybeUninit;
-use core::sync::atomic::{AtomicU32, AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use cortex_m::peripheral::{SYST, syst::SystClkSource};
 use cortex_m_rt::{entry, exception};
 use panic_halt as _;
@@ -73,12 +73,62 @@ const RT_THREAD3_PERIOD_TICKS: u32 = RT_THREAD3_PERIOD_MS * TICKS_PER_MS;
 static mut RT_THREAD3_TIMER_ENTITY: rtsched::RtKTimer =
     rtsched::RtKTimer::new(RT_THREAD3_PERIOD_TICKS, core::ptr::null_mut(), "rt_thread3");
 
+static mut RT_MUTEX_OBSERVER_STACK: rtsched::AlignedStack<STACK_LEN> =
+    rtsched::AlignedStack([0; STACK_LEN]);
+static mut RT_MUTEX_OBSERVER_THREAD: MaybeUninit<rtsched::RtThread> = MaybeUninit::uninit();
+const RT_MUTEX_OBSERVER_PERIOD_MS: u32 = 250;
+const RT_MUTEX_OBSERVER_DEADLINE_MS: u32 = 5;
+const RT_MUTEX_OBSERVER_BUDGET_MS: u32 = 250;
+static mut RT_MUTEX_OBSERVER_TIMER_ENTITY: rtsched::RtKTimer = rtsched::RtKTimer::new_with_timing(
+    rtsched::RtTiming::new(
+        RT_MUTEX_OBSERVER_PERIOD_MS * TICKS_PER_MS,
+        RT_MUTEX_OBSERVER_DEADLINE_MS * TICKS_PER_MS,
+        RT_MUTEX_OBSERVER_BUDGET_MS * TICKS_PER_MS,
+    ),
+    core::ptr::null_mut(),
+    "rt_mutex_observer",
+);
+
+static mut RT_MUTEX_WAITER_STACK: rtsched::AlignedStack<STACK_LEN> =
+    rtsched::AlignedStack([0; STACK_LEN]);
+static mut RT_MUTEX_WAITER_THREAD: MaybeUninit<rtsched::RtThread> = MaybeUninit::uninit();
+const RT_MUTEX_WAITER_PERIOD_MS: u32 = 250;
+const RT_MUTEX_WAITER_DEADLINE_MS: u32 = 10;
+const RT_MUTEX_WAITER_BUDGET_MS: u32 = 250;
+static mut RT_MUTEX_WAITER_TIMER_ENTITY: rtsched::RtKTimer = rtsched::RtKTimer::new_with_timing(
+    rtsched::RtTiming::new(
+        RT_MUTEX_WAITER_PERIOD_MS * TICKS_PER_MS,
+        RT_MUTEX_WAITER_DEADLINE_MS * TICKS_PER_MS,
+        RT_MUTEX_WAITER_BUDGET_MS * TICKS_PER_MS,
+    ),
+    core::ptr::null_mut(),
+    "rt_mutex_waiter",
+);
+
+static mut RT_MUTEX_OWNER_STACK: rtsched::AlignedStack<STACK_LEN> =
+    rtsched::AlignedStack([0; STACK_LEN]);
+static mut RT_MUTEX_OWNER_THREAD: MaybeUninit<rtsched::RtThread> = MaybeUninit::uninit();
+const RT_MUTEX_OWNER_PERIOD_MS: u32 = 250;
+const RT_MUTEX_OWNER_DEADLINE_MS: u32 = 60;
+const RT_MUTEX_OWNER_BUDGET_MS: u32 = 250;
+static mut RT_MUTEX_OWNER_TIMER_ENTITY: rtsched::RtKTimer = rtsched::RtKTimer::new_with_timing(
+    rtsched::RtTiming::new(
+        RT_MUTEX_OWNER_PERIOD_MS * TICKS_PER_MS,
+        RT_MUTEX_OWNER_DEADLINE_MS * TICKS_PER_MS,
+        RT_MUTEX_OWNER_BUDGET_MS * TICKS_PER_MS,
+    ),
+    core::ptr::null_mut(),
+    "rt_mutex_owner",
+);
+
 static SEMA: rtsched::CountingSemaphore = rtsched::CountingSemaphore::empty(3);
 static PRODUCED_TOKENS: AtomicU32 = AtomicU32::new(0);
 static CONSUMED_TOKEN_1: AtomicU32 = AtomicU32::new(0);
 static CONSUMED_TOKEN_2: AtomicU32 = AtomicU32::new(0);
 static TOKEN_OVERFLOWS: AtomicU32 = AtomicU32::new(0);
 static TAKE_ERRORS: AtomicU32 = AtomicU32::new(0);
+
+static MUTEX_DEMO: rtsched::Mutex<u32> = rtsched::Mutex::new(0);
 
 extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
@@ -137,6 +187,60 @@ extern "C" fn rt_thread3_runner(_arg: *mut c_void) -> ! {
             board_print_u32(CONSUMED_TOKEN_2.load(Ordering::Relaxed));
             board_printf::board_printf(" tokens\r\n");
         }
+        rtsched::yieldyi();
+    }
+}
+
+extern "C" fn rt_mutex_observer_runner(_arg: *mut c_void) -> ! {
+    loop {
+        rtsched::set_rt_thread_start_time(0);
+
+        match MUTEX_DEMO.lock() {
+            Ok(_guard) => {
+                board_printf::board_printf("locked mutex from observer\r\n");
+                drop(_guard);
+            }
+            Err(_) => {
+                board_printf::board_printf("failed to lock from observer\r\n");
+            }
+        }
+
+        rtsched::yieldyi();
+    }
+}
+
+extern "C" fn rt_mutex_waiter_runner(_arg: *mut c_void) -> ! {
+    loop {
+        rtsched::set_rt_thread_start_time(0);
+
+        match MUTEX_DEMO.lock() {
+            Ok(_guard) => {
+                board_printf::board_printf("locked mutex from waiter\r\n");
+                drop(_guard);
+            }
+            Err(_) => {
+                board_printf::board_printf("failed to lock from waiter\r\n");
+            }
+        }
+
+        rtsched::yieldyi();
+    }
+}
+
+extern "C" fn rt_mutex_owner_runner(_arg: *mut c_void) -> ! {
+    loop {
+        rtsched::set_rt_thread_start_time(0);
+
+        match MUTEX_DEMO.lock() {
+            Ok(_guard) => {
+                board_printf::board_printf("locked mutex from owner\r\n");
+                drop(_guard);
+            }
+            Err(_) => {
+                board_printf::board_printf("failed to lock from owner\r\n");
+            }
+        }
+
         rtsched::yieldyi();
     }
 }
@@ -209,6 +313,36 @@ fn main() -> ! {
         .spawn(
             core::ptr::addr_of_mut!(RT_THREAD3),
             core::ptr::addr_of_mut!(RT_THREAD3_STACK),
+        );
+
+        rtsched::RtThreadBuilder::new(
+            "rt_mutex_observer",
+            rt_mutex_observer_runner,
+            core::ptr::addr_of_mut!(RT_MUTEX_OBSERVER_TIMER_ENTITY),
+        )
+        .spawn(
+            core::ptr::addr_of_mut!(RT_MUTEX_OBSERVER_THREAD),
+            core::ptr::addr_of_mut!(RT_MUTEX_OBSERVER_STACK),
+        );
+
+        rtsched::RtThreadBuilder::new(
+            "rt_mutex_waiter",
+            rt_mutex_waiter_runner,
+            core::ptr::addr_of_mut!(RT_MUTEX_WAITER_TIMER_ENTITY),
+        )
+        .spawn(
+            core::ptr::addr_of_mut!(RT_MUTEX_WAITER_THREAD),
+            core::ptr::addr_of_mut!(RT_MUTEX_WAITER_STACK),
+        );
+
+        rtsched::RtThreadBuilder::new(
+            "rt_mutex_owner",
+            rt_mutex_owner_runner,
+            core::ptr::addr_of_mut!(RT_MUTEX_OWNER_TIMER_ENTITY),
+        )
+        .spawn(
+            core::ptr::addr_of_mut!(RT_MUTEX_OWNER_THREAD),
+            core::ptr::addr_of_mut!(RT_MUTEX_OWNER_STACK),
         );
 
         let mut syst = init_board_hardware();
