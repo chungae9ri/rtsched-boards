@@ -21,7 +21,7 @@ use rtt_target::rtt_init_print;
 
 const STACK_LEN: usize = 1024;
 const UART_BAUD: u32 = 115_200;
-const CFS_EXEC_MS: u32 = 10;
+const CFS_DEADLINE_MS: u32 = 10;
 const CFS_PERIOD_MS: u32 = 30;
 type RedLed = hal::drivers::pins::Pin<
     hal::drivers::pins::Pio1_6,
@@ -46,7 +46,7 @@ static mut RED_LED: MaybeUninit<RedLed> = MaybeUninit::uninit();
 
 const BOARD_SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 const TICKS_PER_MS: u32 = BOARD_SYS_CLK_FREQ / 1000;
-const CFS_EXEC_TICKS: u32 = CFS_EXEC_MS * TICKS_PER_MS;
+const CFS_DEADLINE_TICKS: u32 = CFS_DEADLINE_MS * TICKS_PER_MS;
 const CFS_PERIOD_TICKS: u32 = CFS_PERIOD_MS * TICKS_PER_MS;
 
 static mut RT_THREAD1_STACK: rtsched::AlignedStack<STACK_LEN> =
@@ -270,7 +270,7 @@ fn main() -> ! {
 
         rtsched::update_sys_clk_freq(BOARD_SYS_CLK_FREQ);
         rtsched::init_ktimer_queue();
-        rtsched::init_cfs(CFS_PERIOD_TICKS, CFS_EXEC_TICKS);
+        rtsched::init_cfs(CFS_PERIOD_TICKS, CFS_DEADLINE_TICKS);
 
         let main_thread = rtsched::CfsThreadBuilder::new("cpu_idle", runtime_main, 16).spawn(
             core::ptr::addr_of_mut!(MAIN_THREAD),
