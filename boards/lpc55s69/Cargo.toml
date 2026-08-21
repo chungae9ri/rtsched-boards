@@ -3,19 +3,37 @@ name = "lpc55s69"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
+default-run = "sched_minimal"
 
 [dependencies]
 cortex-m = { workspace = true, features = ["critical-section-single-core"] }
 cortex-m-rt.workspace = true
-nb.workspace = true
+rtsched = { path = "../../rtsched" }
+
+lpc55-hal = { workspace = true, optional = true }
+lpc55-pac = { workspace = true, optional = true, features = ["rt"] }
+panic-halt = { workspace = true, optional = true }
 rtt-target.workspace = true
-lpc55-hal.workspace = true
-lpc55-pac = { workspace = true, features = ["rt"] }
-panic-halt.workspace = true
-rtsched= { path = "../../rtsched" }
+
+[features]
+default = []
+sched-minimal-timing = ["rtsched/sched-isr-timing"]
+board-rt = [
+    "dep:lpc55-hal",
+    "dep:lpc55-pac",
+    "dep:panic-halt",
+]
 
 [[bin]]
-name = "lpc55s69"
-path = "src/main.rs"
+name = "sched_minimal"
+path = "src/bin/sched_minimal.rs"
+required-features = ["board-rt"]
+test = false
+bench = false
+
+[[bin]]
+name = "board_shell"
+path = "src/bin/board_shell.rs"
+required-features = ["board-rt"]
 test = false
 bench = false
