@@ -12,6 +12,19 @@ To test rtsched, follow these steps:
 3. `git submodule update --init --recursive`
 4. `cargo build --release -p lpc55s69`
 
+## LPC55S69 Board Builds
+
+The LPC55S69 board crate contains multiple firmware binaries:
+
+```sh
+cargo build -p lpc55s69 --bin sched_minimal --features board-rt,sched-minimal-timing --target thumbv8m.main-none-eabihf
+cargo build -p lpc55s69 --bin board_shell --features board-rt --target thumbv8m.main-none-eabihf
+```
+
+`sched_minimal` is the default SysTick-only scheduler demo. `board_shell` uses
+the LPC55 HAL/PAC, UART, LED, and CTIMER interrupt support, so it must be built
+with the `board-rt` feature.
+
 ## Host Tests
 
 Run the scheduler unit tests on the native host target with:

@@ -1,9 +1,13 @@
 #![no_std]
 #![no_main]
 
+#[path = "../board_printf.rs"]
 mod board_printf;
+#[path = "../ctimer.rs"]
 mod ctimer;
+#[path = "../drivers/mod.rs"]
 mod drivers;
+#[path = "../shell.rs"]
 mod shell;
 
 use core::ffi::c_void;
@@ -15,6 +19,7 @@ use panic_halt as _;
 
 use hal::{drivers::pins::Level, prelude::*};
 use lpc55_hal as hal;
+use lpc55_pac as _;
 
 use crate::hal::drivers::Serial;
 use rtt_target::rtt_init_print;
