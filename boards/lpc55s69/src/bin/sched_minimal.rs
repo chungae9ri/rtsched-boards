@@ -199,6 +199,14 @@ fn print_sched_isr_timing() {
     board_print_u32(timing.max_ticks);
     board_printf::board_printf(" samples=");
     board_print_u32(timing.samples);
+    board_printf::board_printf(" advance=");
+    board_print_u32(timing.advance_ktimers_last_ticks);
+    board_printf::board_printf("/");
+    board_print_u32(timing.advance_ktimers_max_ticks);
+    board_printf::board_printf(" dispatch=");
+    board_print_u32(timing.dispatch_expired_ktimer_last_ticks);
+    board_printf::board_printf("/");
+    board_print_u32(timing.dispatch_expired_ktimer_max_ticks);
     board_printf::board_printf("\r\n");
 }
 
