@@ -4,7 +4,7 @@
     {
       "type": "probe-rs-debug",
       "request": "launch",
-      "name": "probe_rs Launch (flash)",
+      "name": "probe_rs Debug (flash and run)",
       "cwd": "${workspaceFolder}",
       "speed": 100,
       "probe": "1366:0105:000720762184",
@@ -23,7 +23,9 @@
       "coreConfigs": [
         {
           "coreIndex": 0,
-          "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/lpc55s69",
+          //"programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/board_shell",
+          "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/sched_minimal",
+          //"programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/examples/sleep_wake",
           "rttEnabled": true,
           "rttChannelFormats": [
             {
@@ -60,7 +62,8 @@
       "coreConfigs": [
         {
           "coreIndex": 0,
-          "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/release/lpc55s69",
+          //"programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/release/lpc55s69",
+          "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/release/sched_minimal",
           "rttEnabled": true,
           "rttChannelFormats": [
             {
@@ -86,7 +89,8 @@
       "coreConfigs": [
         {
           "coreIndex": 0,
-          "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/lpc55s69",
+          //"programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/lpc55s69",
+          "programBinary": "${workspaceFolder}/target/thumbv8m.main-none-eabihf/debug/examples/mixed_rt_cfs",
           "rttEnabled": true,
           "rttChannelFormats": [
             {
