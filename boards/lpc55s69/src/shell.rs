@@ -141,7 +141,7 @@ fn dump_idle_thread() {
     let mut registered = false;
 
     traverse_idle_thread_fn(|thread| {
-        snapshot = cfs_thread_snapshot(thread);
+        snapshot = idle_thread_snapshot(thread);
         registered = true;
     });
 
@@ -150,6 +150,15 @@ fn dump_idle_thread() {
         dump_thread_snapshot(&snapshot);
     } else {
         shell_write_str("  <none>\r\n");
+    }
+}
+
+fn idle_thread_snapshot(thread: &rtsched::ThreadCtx) -> ThreadSnapshot {
+    ThreadSnapshot {
+        id: thread.id,
+        name: thread.name,
+        state: thread.state,
+        ..ThreadSnapshot::default()
     }
 }
 
