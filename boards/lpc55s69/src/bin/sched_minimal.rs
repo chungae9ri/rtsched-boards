@@ -38,7 +38,7 @@ pub const CFS_DEADLINE_TICKS: u32 = 10 * TICKS_PER_MS;
 
 static mut IDLE_STACK: rtsched::AlignedStack<{ STACK_WORDS }> =
     rtsched::AlignedStack([0; STACK_WORDS]);
-static mut IDLE_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
+static mut IDLE_THREAD: MaybeUninit<rtsched::IdleThread> = MaybeUninit::uninit();
 
 static mut BACKGROUND_STACK: rtsched::AlignedStack<{ STACK_WORDS }> =
     rtsched::AlignedStack([0; STACK_WORDS]);
@@ -97,10 +97,6 @@ fn main() -> ! {
         rtsched::init_ktimer_queue();
         rtsched::init_cfs(CFS_PERIOD_TICKS, CFS_DEADLINE_TICKS);
 
-        let idle = rtsched::CfsThreadBuilder::new("cpu_idle", cpu_idle, 16).spawn(
-            core::ptr::addr_of_mut!(IDLE_THREAD),
-            core::ptr::addr_of_mut!(IDLE_STACK),
-        );
         rtsched::CfsThreadBuilder::new("background", background_work, 4).spawn(
             core::ptr::addr_of_mut!(BACKGROUND_THREAD),
             core::ptr::addr_of_mut!(BACKGROUND_STACK),
@@ -119,10 +115,14 @@ fn main() -> ! {
         #[cfg(feature = "sched-minimal-timing")]
         rtsched::reset_sched_tick_to_pendsv_timing();
 
-        rtsched::register_idle_thread(idle);
         configure_systick(&mut syst);
 
-        rtsched::spawn_main_thread(idle)
+        rtsched::spawn_main_thread(
+            "cpu_idle",
+            cpu_idle,
+            core::ptr::addr_of_mut!(IDLE_THREAD),
+            core::ptr::addr_of_mut!(IDLE_STACK),
+        )
     }
 }
 
@@ -195,6 +195,8 @@ fn print_sched_isr_timing() {
 
     board_printf::board_printf("systick->pendsv ticks last=");
     board_print_u32(timing.last_ticks);
+    board_printf::board_printf(" min=");
+    board_print_u32(timing.min_ticks);
     board_printf::board_printf(" max=");
     board_print_u32(timing.max_ticks);
     board_printf::board_printf(" samples=");
@@ -208,6 +210,7 @@ fn print_sched_isr_timing() {
     board_printf::board_printf("/");
     board_print_u32(timing.dispatch_expired_ktimer_max_ticks);
     board_printf::board_printf("\r\n");
+    rtsched::reset_sched_tick_to_pendsv_min_max_ticks();
 }
 
 fn board_print_u32(mut value: u32) {

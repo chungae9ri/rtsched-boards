@@ -107,9 +107,10 @@ extern "C" fn slow_sleeper(_arg: *mut c_void) -> ! {
 
 ### Idle Power Behavior
 
-All examples register `common::cpu_idle` as the idle thread. It is removed from
-normal CFS fairness accounting and runs only when no normal CFS or RT work is
-runnable. Board code can put low-power instructions there:
+All examples start `common::cpu_idle` through `spawn_main_thread`, which
+initializes and registers it as the idle thread. It is removed from normal CFS
+fairness accounting and runs only when no normal CFS or RT work is runnable.
+Board code can put low-power instructions there:
 
 ```rust
 pub extern "C" fn cpu_idle(_arg: *mut c_void) -> ! {

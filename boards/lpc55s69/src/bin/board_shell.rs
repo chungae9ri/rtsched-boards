@@ -40,7 +40,7 @@ pub(crate) static UART_READY: AtomicBool = AtomicBool::new(false);
 /// frame for the CPU idle thread and start it through the same restore
 /// path used by every other thread.
 static mut MAIN_STACK: rtsched::AlignedStack<STACK_LEN> = rtsched::AlignedStack([0; STACK_LEN]);
-static mut MAIN_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
+static mut MAIN_THREAD: MaybeUninit<rtsched::IdleThread> = MaybeUninit::uninit();
 
 static mut SHELL_STACK: rtsched::AlignedStack<STACK_LEN> = rtsched::AlignedStack([0; STACK_LEN]);
 static mut SHELL_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
@@ -277,10 +277,6 @@ fn main() -> ! {
         rtsched::init_ktimer_queue();
         rtsched::init_cfs(CFS_PERIOD_TICKS, CFS_DEADLINE_TICKS);
 
-        let main_thread = rtsched::CfsThreadBuilder::new("cpu_idle", runtime_main, 16).spawn(
-            core::ptr::addr_of_mut!(MAIN_THREAD),
-            core::ptr::addr_of_mut!(MAIN_STACK),
-        );
         rtsched::CfsThreadBuilder::new("shell", shell::shell_task, 1).spawn(
             core::ptr::addr_of_mut!(SHELL_THREAD),
             core::ptr::addr_of_mut!(SHELL_STACK),
@@ -352,9 +348,13 @@ fn main() -> ! {
 
         let mut syst = init_board_hardware();
 
-        rtsched::register_idle_thread(main_thread);
         set_systick(&mut syst);
-        rtsched::spawn_main_thread(main_thread)
+        rtsched::spawn_main_thread(
+            "cpu_idle",
+            runtime_main,
+            core::ptr::addr_of_mut!(MAIN_THREAD),
+            core::ptr::addr_of_mut!(MAIN_STACK),
+        )
     }
 }
 
