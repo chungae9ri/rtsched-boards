@@ -322,6 +322,7 @@ fn thread_state_name(state: rtsched::ThreadState) -> &'static str {
         rtsched::ThreadState::Ready => "Ready",
         rtsched::ThreadState::Running => "Running",
         rtsched::ThreadState::Waiting => "Waiting",
+        rtsched::ThreadState::Suspended => "Suspended",
     }
 }
 
