@@ -25,6 +25,25 @@ cargo build -p lpc55s69 --bin board_shell --features board-rt --target thumbv8m.
 the LPC55 HAL/PAC, UART, LED, and CTIMER interrupt support, so it must be built
 with the `board-rt` feature.
 
+`board_shell` also starts two CFS message-queue demo threads, `message_ping` and
+`message_pong`. Ping sends a sequence-tagged payload through a one-slot request
+queue; pong validates it and replies with the same sequence and an incremented
+payload through a separate one-slot reply queue. Ping validates the response,
+then sleeps for 500 ms before the next exchange. Both threads use blocking
+receives.
+
+Enter `message` at the UART shell to inspect `requests_sent`, `replies_sent`,
+`round_trips`, `last_sequence`, `validation_errors`, and `queue_errors`.
+`round_trips` should keep increasing and both error counts should stay zero.
+Counters may temporarily differ during an exchange or before a preempted thread
+updates its counter; `last_sequence` is meaningful after the first completed
+exchange. A queue API error stops the affected demo participant and increments
+`queue_errors`. Use `ps` to see
+`message_ping`/`message_pong` in the run or wait queues, including
+`message-queue-receive` for a suspended receiver. This ping/pong demo checks
+bidirectional delivery and receive blocking; it keeps at most one request in
+flight and does not stress full-queue backpressure.
+
 ## Host Tests
 
 Run the scheduler unit tests on the native host target with:

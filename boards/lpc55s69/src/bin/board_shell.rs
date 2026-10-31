@@ -49,6 +49,53 @@ static mut LED_BLINK_STACK: rtsched::AlignedStack<STACK_LEN> =
 static mut LED_BLINK_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
 static mut RED_LED: MaybeUninit<RedLed> = MaybeUninit::uninit();
 
+static mut MESSAGE_PING_STACK: rtsched::AlignedStack<STACK_LEN> =
+    rtsched::AlignedStack([0; STACK_LEN]);
+static mut MESSAGE_PING_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
+static mut MESSAGE_PONG_STACK: rtsched::AlignedStack<STACK_LEN> =
+    rtsched::AlignedStack([0; STACK_LEN]);
+static mut MESSAGE_PONG_THREAD: MaybeUninit<rtsched::CfsThread> = MaybeUninit::uninit();
+
+const MESSAGE_EXCHANGE_DELAY_MS: u32 = 500;
+const MESSAGE_PAYLOAD_MASK: u32 = 0x5a5a_a5a5;
+
+#[derive(Clone, Copy)]
+struct DemoMessage {
+    sequence: u32,
+    value: u32,
+}
+
+// One request at a time, with separate channels for each direction. Both
+// threads exercise blocking receives without holding a print or demo mutex.
+static MESSAGE_REQUESTS: rtsched::MessageQueue<DemoMessage, 1> = rtsched::MessageQueue::new();
+static MESSAGE_REPLIES: rtsched::MessageQueue<DemoMessage, 1> = rtsched::MessageQueue::new();
+static MESSAGE_REQUESTS_SENT: AtomicU32 = AtomicU32::new(0);
+static MESSAGE_REPLIES_SENT: AtomicU32 = AtomicU32::new(0);
+static MESSAGE_ROUND_TRIPS: AtomicU32 = AtomicU32::new(0);
+static MESSAGE_LAST_SEQUENCE: AtomicU32 = AtomicU32::new(0);
+static MESSAGE_VALIDATION_ERRORS: AtomicU32 = AtomicU32::new(0);
+static MESSAGE_QUEUE_ERRORS: AtomicU32 = AtomicU32::new(0);
+
+pub(crate) struct MessageDemoStats {
+    pub requests_sent: u32,
+    pub replies_sent: u32,
+    pub round_trips: u32,
+    pub last_sequence: u32,
+    pub validation_errors: u32,
+    pub queue_errors: u32,
+}
+
+pub(crate) fn message_demo_stats() -> MessageDemoStats {
+    cortex_m::interrupt::free(|_| MessageDemoStats {
+        requests_sent: MESSAGE_REQUESTS_SENT.load(Ordering::Relaxed),
+        replies_sent: MESSAGE_REPLIES_SENT.load(Ordering::Relaxed),
+        round_trips: MESSAGE_ROUND_TRIPS.load(Ordering::Relaxed),
+        last_sequence: MESSAGE_LAST_SEQUENCE.load(Ordering::Relaxed),
+        validation_errors: MESSAGE_VALIDATION_ERRORS.load(Ordering::Relaxed),
+        queue_errors: MESSAGE_QUEUE_ERRORS.load(Ordering::Relaxed),
+    })
+}
+
 const BOARD_SYS_CLK_FREQ: u32 = 12_000_000; // 12 MHz
 const TICKS_PER_MS: u32 = BOARD_SYS_CLK_FREQ / 1000;
 const CFS_DEADLINE_TICKS: u32 = CFS_DEADLINE_MS * TICKS_PER_MS;
@@ -134,6 +181,69 @@ static TOKEN_OVERFLOWS: AtomicU32 = AtomicU32::new(0);
 static TAKE_ERRORS: AtomicU32 = AtomicU32::new(0);
 
 static MUTEX_DEMO: rtsched::Mutex<u32> = rtsched::Mutex::new(0);
+
+extern "C" fn message_ping_runner(_arg: *mut c_void) -> ! {
+    let mut sequence = 0_u32;
+    loop {
+        let request = DemoMessage {
+            sequence,
+            value: sequence ^ MESSAGE_PAYLOAD_MASK,
+        };
+        MESSAGE_REQUESTS
+            .send(request)
+            .unwrap_or_else(|_| message_demo_fail());
+        MESSAGE_REQUESTS_SENT.fetch_add(1, Ordering::Relaxed);
+
+        let reply = MESSAGE_REPLIES
+            .receive()
+            .unwrap_or_else(|_| message_demo_fail());
+        if reply.sequence == sequence && reply.value == request.value.wrapping_add(1) {
+            // Keep the completed-exchange fields consistent for shell snapshots.
+            cortex_m::interrupt::free(|_| {
+                MESSAGE_LAST_SEQUENCE.store(sequence, Ordering::Relaxed);
+                MESSAGE_ROUND_TRIPS.fetch_add(1, Ordering::Relaxed);
+            });
+        } else {
+            MESSAGE_VALIDATION_ERRORS.fetch_add(1, Ordering::Relaxed);
+        }
+
+        sequence = sequence.wrapping_add(1);
+        rtsched::msleepyi(MESSAGE_EXCHANGE_DELAY_MS);
+    }
+}
+
+extern "C" fn message_pong_runner(_arg: *mut c_void) -> ! {
+    let mut expected_sequence = 0_u32;
+    loop {
+        let request = MESSAGE_REQUESTS
+            .receive()
+            .unwrap_or_else(|_| message_demo_fail());
+        if request.sequence != expected_sequence
+            || request.value != (request.sequence ^ MESSAGE_PAYLOAD_MASK)
+        {
+            MESSAGE_VALIDATION_ERRORS.fetch_add(1, Ordering::Relaxed);
+        }
+        expected_sequence = request.sequence.wrapping_add(1);
+
+        let reply = DemoMessage {
+            sequence: request.sequence,
+            value: request.value.wrapping_add(1),
+        };
+        MESSAGE_REPLIES
+            .send(reply)
+            .unwrap_or_else(|_| message_demo_fail());
+        MESSAGE_REPLIES_SENT.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+fn message_demo_fail() -> ! {
+    MESSAGE_QUEUE_ERRORS.fetch_add(1, Ordering::Relaxed);
+    // Stop this participant after a transport error so retries cannot inject
+    // duplicate requests/replies. Keep the shell and other demos running.
+    loop {
+        rtsched::msleepyi(1_000);
+    }
+}
 
 extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
@@ -284,6 +394,14 @@ fn main() -> ! {
         rtsched::CfsThreadBuilder::new("led_blink", led_blink_task, 4).spawn(
             core::ptr::addr_of_mut!(LED_BLINK_THREAD),
             core::ptr::addr_of_mut!(LED_BLINK_STACK),
+        );
+        rtsched::CfsThreadBuilder::new("message_ping", message_ping_runner, 2).spawn(
+            core::ptr::addr_of_mut!(MESSAGE_PING_THREAD),
+            core::ptr::addr_of_mut!(MESSAGE_PING_STACK),
+        );
+        rtsched::CfsThreadBuilder::new("message_pong", message_pong_runner, 2).spawn(
+            core::ptr::addr_of_mut!(MESSAGE_PONG_THREAD),
+            core::ptr::addr_of_mut!(MESSAGE_PONG_STACK),
         );
 
         rtsched::RtThreadBuilder::new(
