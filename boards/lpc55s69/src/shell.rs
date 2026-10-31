@@ -11,7 +11,7 @@ use crate::board_printf;
 use crate::drivers::uart;
 
 const SHELL_BUF_LEN: usize = 32;
-const PS_SNAPSHOT_CAPACITY: usize = 8;
+const PS_SNAPSHOT_CAPACITY: usize = 12;
 
 pub extern "C" fn shell_task(_arg: *mut c_void) -> ! {
     let mut line_buf = [0u8; SHELL_BUF_LEN];
@@ -82,6 +82,7 @@ fn handle_shell_command(line: &[u8]) {
         b"help" => dump_help(),
         b"ps" => dump_run_queue(),
         b"tmr" => dump_ktimer_queue(),
+        b"message" => dump_message_demo(),
         b"uart" => {
             board_printf::set_stdout_uart();
             shell_write_str("stdout: uart\r\n");
@@ -101,11 +102,12 @@ fn handle_shell_command(line: &[u8]) {
 
 fn dump_help() {
     shell_write_str("commands:\r\n");
-    shell_write_str("  help  show this command list\r\n");
-    shell_write_str("  ps    show run queue threads\r\n");
-    shell_write_str("  tmr   show kernel timer queue\r\n");
-    shell_write_str("  uart  route board_printf output to UART\r\n");
-    shell_write_str("  rtt   route board_printf output to RTT\r\n");
+    shell_write_str("  help     show this command list\r\n");
+    shell_write_str("  ps       show run queue threads\r\n");
+    shell_write_str("  tmr      show kernel timer queue\r\n");
+    shell_write_str("  message  show message queue ping/pong counters\r\n");
+    shell_write_str("  uart     route board_printf output to UART\r\n");
+    shell_write_str("  rtt      route board_printf output to RTT\r\n");
 }
 
 fn dump_run_queue() {
@@ -134,6 +136,23 @@ fn dump_run_queue() {
     }
 
     dump_wait_queue();
+}
+
+fn dump_message_demo() {
+    let stats = super::message_demo_stats();
+    shell_write_str("message queue ping/pong:\r\n  requests_sent=");
+    shell_write_u32(stats.requests_sent);
+    shell_write_str(" replies_sent=");
+    shell_write_u32(stats.replies_sent);
+    shell_write_str(" round_trips=");
+    shell_write_u32(stats.round_trips);
+    shell_write_str(" last_sequence=");
+    shell_write_u32(stats.last_sequence);
+    shell_write_str("\r\n  validation_errors=");
+    shell_write_u32(stats.validation_errors);
+    shell_write_str(" queue_errors=");
+    shell_write_u32(stats.queue_errors);
+    shell_write_str("\r\n");
 }
 
 fn dump_idle_thread() {
@@ -331,6 +350,8 @@ fn wait_event_name(waitevt: Option<rtsched::SyncType>) -> &'static str {
         Some(rtsched::SyncType::BinarySemaphore) => "binary-semaphore",
         Some(rtsched::SyncType::CountingSemaphore) => "counting-semaphore",
         Some(rtsched::SyncType::Mutex) => "mutex",
+        Some(rtsched::SyncType::MessageQueueSend) => "message-queue-send",
+        Some(rtsched::SyncType::MessageQueueReceive) => "message-queue-receive",
         None => "none",
     }
 }
