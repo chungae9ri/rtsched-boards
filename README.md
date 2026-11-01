@@ -49,12 +49,13 @@ flight and does not stress full-queue backpressure.
 Run the scheduler unit tests on the native host target with:
 
 ```sh
-cargo test --manifest-path rtsched/Cargo.toml --target x86_64-unknown-linux-gnu
+cargo test --manifest-path rtsched/Cargo.toml --features host --target x86_64-unknown-linux-gnu
 ```
 
-The explicit `--target x86_64-unknown-linux-gnu` keeps the host-only test
+The `host` feature explicitly selects the test platform. The
+`--target x86_64-unknown-linux-gnu` option keeps the host-only test
 harness on the native target even when your Cargo environment or board workflow
-defaults to an embedded Cortex-M target. On a non-x86 Linux host, replace the
+defaults to an embedded Cortex-M target. On other native hosts, replace the
 target triple with the `host:` value printed by `rustc -vV`.
 
 ## Example Patterns
