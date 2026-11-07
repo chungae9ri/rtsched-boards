@@ -95,7 +95,6 @@ static mut CONTROL_TIMER: rtsched::RtKTimer = rtsched::RtKTimer::new_with_timing
 
 extern "C" fn control_loop(_arg: *mut c_void) -> ! {
     loop {
-        rtsched::set_rt_thread_start_time(0);
         CONTROL_JOBS.fetch_add(1, Ordering::Relaxed);
         common::spin(8_000);
         rtsched::yieldyi();
