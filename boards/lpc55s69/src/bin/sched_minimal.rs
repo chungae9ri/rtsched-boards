@@ -235,7 +235,6 @@ fn board_print_u32(mut value: u32) {
 
 extern "C" fn fast_rt_job(_arg: *mut c_void) -> ! {
     loop {
-        rtsched::set_rt_thread_start_time(0);
         FAST_JOBS.fetch_add(1, Ordering::Relaxed);
         rtsched::yieldyi();
     }

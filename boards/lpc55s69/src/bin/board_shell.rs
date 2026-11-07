@@ -247,7 +247,6 @@ fn message_demo_fail() -> ! {
 
 extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
     loop {
-        rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
             board_print_thread_iteration("rt_thread1", i + 1);
             rtsched::msleepyi(10);
@@ -268,7 +267,6 @@ extern "C" fn rt_thread1_runner(_arg: *mut c_void) -> ! {
 
 extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
     loop {
-        rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
             board_print_thread_iteration("rt_thread2", i + 1);
             rtsched::msleepyi(10);
@@ -288,7 +286,6 @@ extern "C" fn rt_thread2_runner(_arg: *mut c_void) -> ! {
 
 extern "C" fn rt_thread3_runner(_arg: *mut c_void) -> ! {
     loop {
-        rtsched::set_rt_thread_start_time(0);
         for i in 0..5 {
             board_print_thread_iteration("rt_thread3", i + 1);
             rtsched::msleepyi(10);
@@ -308,8 +305,6 @@ extern "C" fn rt_thread3_runner(_arg: *mut c_void) -> ! {
 
 extern "C" fn rt_mutex_observer_runner(_arg: *mut c_void) -> ! {
     loop {
-        rtsched::set_rt_thread_start_time(0);
-
         match MUTEX_DEMO.lock() {
             Ok(_guard) => {
                 board_printf::board_printf("locked mutex from observer\r\n");
@@ -326,8 +321,6 @@ extern "C" fn rt_mutex_observer_runner(_arg: *mut c_void) -> ! {
 
 extern "C" fn rt_mutex_waiter_runner(_arg: *mut c_void) -> ! {
     loop {
-        rtsched::set_rt_thread_start_time(0);
-
         match MUTEX_DEMO.lock() {
             Ok(_guard) => {
                 board_printf::board_printf("locked mutex from waiter\r\n");
@@ -344,8 +337,6 @@ extern "C" fn rt_mutex_waiter_runner(_arg: *mut c_void) -> ! {
 
 extern "C" fn rt_mutex_owner_runner(_arg: *mut c_void) -> ! {
     loop {
-        rtsched::set_rt_thread_start_time(0);
-
         match MUTEX_DEMO.lock() {
             Ok(_guard) => {
                 board_printf::board_printf("locked mutex from owner\r\n");
