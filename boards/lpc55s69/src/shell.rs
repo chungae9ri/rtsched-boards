@@ -338,7 +338,8 @@ fn shell_write_u64(mut value: u64) {
 
 fn thread_state_name(state: rtsched::ThreadState) -> &'static str {
     match state {
-        rtsched::ThreadState::Ready => "Ready",
+        rtsched::ThreadState::ReadyActive => "ReadyActive",
+        rtsched::ThreadState::ReadyInactive => "ReadyInactive",
         rtsched::ThreadState::Running => "Running",
         rtsched::ThreadState::Waiting => "Waiting",
         rtsched::ThreadState::Suspended => "Suspended",
